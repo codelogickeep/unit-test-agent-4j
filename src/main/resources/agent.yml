@@ -1,0 +1,23 @@
+# LLM Settings
+llm:
+  provider: "deepseek" # deepseek | openai
+  apiKey: "${env:AGENT_API_KEY}"
+  baseUrl: "${env:AGENT_BASE_URL}"
+  modelName: "${env:AGENT_MODEL_NAME}"
+  temperature: 0.1
+  timeout: 120
+
+# Workflow Settings
+workflow:
+  maxRetries: 3
+
+# Prompts Configuration
+prompts:
+  system: "prompts/system-prompt.st"
+
+# MCP Configuration (Future Placeholder)
+mcp:
+  servers: []
+
+# Skills Configuration (Future Placeholder)
+skills: []

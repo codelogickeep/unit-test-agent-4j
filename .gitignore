@@ -1,0 +1,19 @@
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# User requested
+doc/
+test-config.yml
+test-governance.yml
+
