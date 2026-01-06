@@ -9,9 +9,16 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class MavenExecutorToolImpl implements MavenExecutorTool {
+import dev.langchain4j.agent.tool.Tool;
 
-    @Override
+public class MavenExecutorToolImpl implements AgentTool {
+
+    public record ExecutionResult(int exitCode, String stdOut, String stdErr) {
+        //java.lang.ProcessBuilder
+    }
+
+
+    @Tool("Compile the project (src and test) using Maven. Useful to check for syntax errors before running tests.")
     public ExecutionResult compileProject() throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -22,7 +29,7 @@ public class MavenExecutorToolImpl implements MavenExecutorTool {
         } else {
             command.add("mvn");
         }
-        
+
         // Compile both src and test
         command.add("test-compile");
         command.add("-B");
@@ -46,7 +53,7 @@ public class MavenExecutorToolImpl implements MavenExecutorTool {
         return new ExecutionResult(process.exitValue(), stdOut, stdErr);
     }
 
-    @Override
+    @Tool("Execute Maven tests for a specific class. Returns exit code and output.")
     public ExecutionResult executeTest(String testClassName) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -57,7 +64,7 @@ public class MavenExecutorToolImpl implements MavenExecutorTool {
         } else {
             command.add("mvn");
         }
-        
+
         command.add("test");
         command.add("-Dtest=" + testClassName);
         command.add("-B");
@@ -71,4 +78,3 @@ public class MavenExecutorToolImpl implements MavenExecutorTool {
         }
     }
 }
-

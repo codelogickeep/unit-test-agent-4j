@@ -1,8 +1,6 @@
 package com.codelogickeep.agent.ut.engine;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import com.codelogickeep.agent.ut.config.GovernanceConfig;
-import com.codelogickeep.agent.ut.config.PolicyRule;
 
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -17,12 +15,12 @@ import java.util.concurrent.TimeUnit;
 
 public class EnvironmentChecker {
 
-    public static void check(AppConfig config, GovernanceConfig governanceConfig) {
+    public static void check(AppConfig config) {
         System.out.println("\n>>> Starting Environment Check...\n");
 
         boolean mvnOk = checkMaven();
         boolean llmOk = checkLlm(config);
-        boolean permOk = checkPermissions(governanceConfig);
+        boolean permOk = checkPermissions();
 
         System.out.println("\n>>> Environment Check Summary:");
         System.out.println("Maven: " + (mvnOk ? "OK" : "FAILED"));
@@ -97,7 +95,7 @@ public class EnvironmentChecker {
         }
     }
 
-    private static boolean checkPermissions(GovernanceConfig config) {
+    private static boolean checkPermissions() {
         System.out.println("Checking Permissions... ");
         boolean allOk = true;
 
@@ -134,34 +132,6 @@ public class EnvironmentChecker {
             System.out.println(
                     "    Suggestion: Ensure you have write permissions to 'src/test/java' and it exists (or can be created).");
             allOk = false;
-        }
-
-        // 3. Check Governance Config
-        if (config != null && config.isEnabled()) {
-            System.out.println("  [Governance] Enabled: YES");
-            // Check if policy allows writing to src/test/java
-            // We can't easily simulate the policy check without SpEL context,
-            // but we can check if rules exist.
-            boolean hasWriteRule = false;
-            if (config.getPolicy() != null) {
-                for (PolicyRule rule : config.getPolicy()) {
-                    if ("file-write".equals(rule.getResource()) && "ALLOW".equalsIgnoreCase(rule.getAction())) {
-                        hasWriteRule = true;
-                        System.out.println("  [Governance] Rule for 'file-write': FOUND (" + rule.getCondition() + ")");
-                    }
-                }
-            }
-
-            if (!hasWriteRule) {
-                System.out.println(
-                        "  [Governance] Rule for 'file-write': WARNING (No explicit ALLOW rule found for 'file-write')");
-                System.out.println("    Suggestion: Add a rule to governance.yml to allow writing to 'src/test/java/'");
-                // We don't fail strictly here as DENY rules might be default or specific.
-            }
-
-        } else {
-            System.out.println(
-                    "  [Governance] Enabled: NO (All actions allowed by Agent, but OS permissions still apply)");
         }
 
         return allOk;

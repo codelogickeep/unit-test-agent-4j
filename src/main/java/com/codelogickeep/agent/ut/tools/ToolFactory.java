@@ -1,8 +1,6 @@
 package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import com.codelogickeep.agent.ut.config.GovernanceConfig;
-import com.codelogickeep.agent.ut.governance.ToolGovernanceProxy;
 import com.codelogickeep.agent.ut.infra.AgentTool;
 import com.codelogickeep.agent.ut.infra.KnowledgeBaseToolImpl;
 import org.reflections.Reflections;
@@ -20,8 +18,7 @@ import java.util.Set;
 public class ToolFactory {
     private static final Logger log = LoggerFactory.getLogger(ToolFactory.class);
 
-    @SuppressWarnings("unchecked")
-    public static List<Object> loadAndWrapTools(AppConfig appConfig, GovernanceConfig governanceConfig, String knowledgeBasePath) {
+    public static List<Object> loadAndWrapTools(AppConfig appConfig, String knowledgeBasePath) {
         List<Object> tools = new ArrayList<>();
         
         // Scan for implementations of AgentTool
@@ -47,28 +44,9 @@ public class ToolFactory {
                     ((KnowledgeBaseToolImpl) instance).init(appConfig, knowledgeBasePath);
                 }
 
-                // Find the interface that extends AgentTool to proxy it
-                // We assume the class implements an interface that extends AgentTool.
-                // We need to proxy that specific interface.
-                Class<?>[] interfaces = clazz.getInterfaces();
-                Class<AgentTool> targetInterface = null;
-                
-                for (Class<?> iface : interfaces) {
-                    if (AgentTool.class.isAssignableFrom(iface) && iface != AgentTool.class) {
-                         // This is likely the specific tool interface (e.g. FileSystemTool)
-                         targetInterface = (Class<AgentTool>) iface;
-                         break;
-                    }
-                }
-
-                if (targetInterface != null) {
-                    // Wrap with Governance Proxy
-                    Object proxy = ToolGovernanceProxy.createProxy(instance, targetInterface, governanceConfig);
-                    tools.add(proxy);
-                    log.info("Registered Tool: {} (Proxied via {})", clazz.getSimpleName(), targetInterface.getSimpleName());
-                } else {
-                    log.warn("Skipping Tool {}: Could not find specific interface extending AgentTool.", clazz.getSimpleName());
-                }
+                // Register Tool Directly (No Governance Proxy)
+                tools.add(instance);
+                log.info("Registered Tool: {}", clazz.getSimpleName());
 
             } catch (Exception e) {
                 log.error("Failed to instantiate tool: {}", clazz.getName(), e);

@@ -5,6 +5,7 @@
   <artifactId>unit-test-agent-4j</artifactId>
   <version>0.1.0-INIT</version>
   <build>
+    <finalName>unit-test-agent-4j</finalName>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>

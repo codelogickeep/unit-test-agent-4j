@@ -27,6 +27,7 @@ public class LlmClient {
         OpenAiStreamingChatModel.OpenAiStreamingChatModelBuilder builder = OpenAiStreamingChatModel.builder()
                 .apiKey(config.getApiKey())
                 .modelName(config.getModelName())
+                .sendThinking(true)
                 .temperature(config.getTemperature());
 
         if (baseUrl != null && !baseUrl.isEmpty()) {

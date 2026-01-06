@@ -1,9 +1,9 @@
 # LLM Settings
 llm:
   provider: "deepseek" # deepseek | openai
-  apiKey: "${env:AGENT_API_KEY}"
-  baseUrl: "${env:AGENT_BASE_URL}"
-  modelName: "${env:AGENT_MODEL_NAME}"
+  apiKey: "${env:UT_AGENT_API_KEY}"
+  baseUrl: "${env:UT_AGENT_BASE_URL}"
+  modelName: "${env:UT_AGENT_MODEL_NAME}"
   temperature: 0.1
   timeout: 120
 

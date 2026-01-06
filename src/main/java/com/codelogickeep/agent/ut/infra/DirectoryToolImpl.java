@@ -8,9 +8,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class DirectoryToolImpl implements DirectoryTool {
+import dev.langchain4j.agent.tool.Tool;
 
-    @Override
+public class DirectoryToolImpl implements AgentTool {
+
+    @Tool("List files and directories in a given path. Returns names suffixed with '/' if they are directories.")
     public List<String> listFiles(String path) throws IOException {
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
@@ -31,7 +33,13 @@ public class DirectoryToolImpl implements DirectoryTool {
         }
     }
 
-    @Override
+    @Tool("Check if a directory exists.")
+    public boolean directoryExists(String path) {
+        Path p = Paths.get(path);
+        return Files.exists(p) && Files.isDirectory(p);
+    }
+
+    @Tool("Create a directory and all non-existent parent directories.")
     public void createDirectory(String path) throws IOException {
         Path p = Paths.get(path);
         Files.createDirectories(p);

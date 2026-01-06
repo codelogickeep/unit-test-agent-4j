@@ -1,7 +1,5 @@
 package com.codelogickeep.agent.ut;
-
 import com.codelogickeep.agent.ut.config.AppConfig;
-import com.codelogickeep.agent.ut.config.GovernanceConfig;
 import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
 import com.codelogickeep.agent.ut.engine.LlmClient;
 import com.codelogickeep.agent.ut.tools.ToolFactory;
@@ -19,7 +17,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 @Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "0.1.0",
-        description = "AI Agent for generating JUnit 5 tests with Governance.")
+        description = "AI Agent for generating JUnit 5 tests.")
 public class App implements Callable<Integer> {
 
     @Option(names = {"-t", "--target"}, description = "Target Java file to test")
@@ -35,6 +33,12 @@ public class App implements Callable<Integer> {
     private String knowledgeBasePath;
 
     public static void main(String[] args) {
+        if (args.length == 0) {
+            System.out.println("Unit Test Agent: An AI assistant for automatically generating JUnit 5 unit tests.");
+            System.out.println();
+            new CommandLine(new App()).usage(System.out);
+            System.exit(0);
+        }
         int exitCode = new CommandLine(new App()).execute(args);
         System.exit(exitCode);
     }
@@ -43,20 +47,18 @@ public class App implements Callable<Integer> {
     public Integer call() throws Exception {
         // 1. Load Configurations
         AppConfig config = loadAppConfig();
-        GovernanceConfig governanceConfig = loadGovernanceConfig();
 
         if (checkEnv) {
-            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, governanceConfig);
+            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config);
             return 0;
         }
         
-        // 2. Setup Context & Governance
-        // Note: governor-core context is removed as we use our own implementation now.
-        // We could introduce a custom context if needed, but for now we skip Context.setupGovernanceContext.
+        // 2. Setup Context
+        // Governance context removed.
 
         try {
-            // 3. Initialize and Wrap Tools Dynamically
-            List<Object> tools = ToolFactory.loadAndWrapTools(config, governanceConfig, knowledgeBasePath);
+            // 3. Initialize Tools Dynamically
+            List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath);
 
             // 4. Initialize AI Engine
             LlmClient llmClient = new LlmClient(config.getLlm());
@@ -135,27 +137,6 @@ public class App implements Callable<Integer> {
             if (value != null) {
                 config.getLlm().setApiKey(value);
             }
-        }
-
-        return config;
-    }
-
-    private GovernanceConfig loadGovernanceConfig() throws IOException {
-        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-        GovernanceConfig config = null;
-
-        // Force load from Classpath (Built-in only)
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream("governance.yml")) {
-            if (in != null) {
-                config = mapper.readValue(in, GovernanceConfig.class);
-                System.out.println(">>> Loaded built-in governance configuration.");
-            }
-        }
-        
-        if (config == null) {
-            System.out.println(">>> Warning: Built-in governance configuration not found. Governance disabled.");
-            config = new GovernanceConfig();
-            config.setEnabled(false);
         }
 
         return config;

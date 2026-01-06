@@ -36,6 +36,11 @@ public class AgentOrchestrator {
 
         // Load System Prompt dynamically
         String systemPrompt = loadSystemPrompt();
+        
+        // Debug: Print registered tool names
+        for (Object tool : tools) {
+             log.info("Agent Tool Registered: {}", tool.getClass().getSimpleName());
+        }
 
         // Create the AI Service (Assistant)
         UnitTestAssistant assistant = AiServices.builder(UnitTestAssistant.class)

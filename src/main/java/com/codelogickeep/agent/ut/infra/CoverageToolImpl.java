@@ -12,17 +12,19 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-public class CoverageToolImpl implements CoverageTool {
+import dev.langchain4j.agent.tool.Tool;
 
-    @Override
+public class CoverageToolImpl implements AgentTool {
+
+    @Tool("Get the test coverage report summary (JaCoCo). Requires tests to be executed first.")
     public String getCoverageReport(String modulePath) throws IOException {
         // Assume standard Maven structure: target/site/jacoco/jacoco.xml
         Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
         File xmlFile = reportPath.toFile();
 
         if (!xmlFile.exists()) {
-            return "Coverage report not found at " + reportPath.toAbsolutePath() + 
-                   ". Make sure tests have been executed successfully.";
+            return "Coverage report not found at " + reportPath.toAbsolutePath() +
+                    ". Make sure tests have been executed successfully.";
         }
 
         try {
@@ -35,7 +37,7 @@ public class CoverageToolImpl implements CoverageTool {
             // Extract global counters
             StringBuilder sb = new StringBuilder();
             sb.append("Coverage Summary:\n");
-            
+
             NodeList counters = doc.getDocumentElement().getChildNodes();
             for (int i = 0; i < counters.getLength(); i++) {
                 Node node = counters.item(i);
@@ -46,7 +48,7 @@ public class CoverageToolImpl implements CoverageTool {
                     long covered = Long.parseLong(element.getAttribute("covered"));
                     long total = missed + covered;
                     double percentage = total == 0 ? 0 : (double) covered / total * 100;
-                    
+
                     sb.append(String.format("  - %s: %.1f%% (%d/%d)\n", type, percentage, covered, total));
                 }
             }
@@ -56,4 +58,3 @@ public class CoverageToolImpl implements CoverageTool {
         }
     }
 }
-

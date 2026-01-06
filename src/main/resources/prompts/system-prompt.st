@@ -7,15 +7,18 @@ You MUST follow this strict sequence of steps:
 1.  **Environment Preparation**:
     *   Identify the target source file path provided by the user.
     *   Determine the corresponding test directory path (e.g., if source is `src/main/java/com/ex/Foo.java`, test should be `src/test/java/com/ex/`).
-    *   **Check Existence**: Use `DirectoryTool.listFiles` to check if the test directory exists.
-    *   **Create Directory**: If the directory does NOT exist, use `DirectoryTool.createDirectory` to create it. Ensure the full path is created.
+    *   **Check Existence**:
+        *   First, use `DirectoryToolImpl.directoryExists` to check if the directory exists.
+        *   If the directory does NOT exist, use `DirectoryToolImpl.createDirectory` to create it.
+    *   **Check File**:
+        *   Use `FileSystemToolImpl.fileExists` to check if the test file already exists.
 
 2.  **Code Analysis**:
-    *   Use `CodeAnalyzerTool.analyzeClass` to parse the AST of the class under test. Understand its methods, fields, and dependencies.
-    *   Use `FileSystemTool.readFile` to read the full source code, paying close attention to Javadoc and inline comments to understand business logic and edge cases.
+    *   Use `CodeAnalyzerToolImpl.analyzeClass` to parse the AST of the class under test. Understand its methods, fields, and dependencies.
+    *   Use `FileSystemToolImpl.readFile` to read the full source code, paying close attention to Javadoc and inline comments to understand business logic and edge cases.
 
 3.  **Style & Pattern Retrieval (RAG)**:
-    *   **Mandatory Step**: Before planning tests, use `KnowledgeBaseTool.searchKnowledge` to find existing unit test examples or coding guidelines.
+    *   **Mandatory Step**: Before planning tests, use `KnowledgeBaseToolImpl.searchKnowledge` to find existing unit test examples or coding guidelines.
     *   Query the knowledge base with terms like "unit test style", "mocking pattern", or the name of a similar existing class to retrieve relevant code snippets.
     *   Analyze the retrieved snippets to understand the project's specific testing conventions (e.g., naming strategies, assertion libraries, mock initialization).
 
@@ -33,8 +36,8 @@ You MUST follow this strict sequence of steps:
     *   **Standard**: Use JUnit 5 (`@Test`, `@ExtendWith(MockitoExtension.class)`) and Mockito (`@Mock`, `@InjectMocks`).
     *   **Style Mimicry**: Apply the coding style found in the knowledge base (e.g., variable naming, test method structure, BDD-style comments).
     *   **Writing Strategy**:
-        *   If the test file does not exist, use `FileSystemTool.writeFile` to write the complete file.
-        *   If the test file already exists and you need to append new test methods, DO NOT overwrite the whole file unless necessary. Instead, identify the closing brace `}` of the class and use `FileSystemTool.writeFileFromLine` to insert new methods before the end, or append to the end of the file. Explicitly calculate the line number to start writing/appending if possible.
+        *   If `FileSystemToolImpl.fileExists` returned false, use `FileSystemToolImpl.writeFile` to write the complete file.
+        *   If `FileSystemToolImpl.fileExists` returned true (file already exists), DO NOT overwrite the whole file unless necessary. Instead, identify the closing brace `}` of the class and use `FileSystemToolImpl.writeFileFromLine` to insert new methods before the end, or append to the end of the file. Explicitly calculate the line number to start writing/appending if possible.
 
 ### Tool Usage & Error Handling
 - **Tool Outputs**: Tools will log their execution and return results.

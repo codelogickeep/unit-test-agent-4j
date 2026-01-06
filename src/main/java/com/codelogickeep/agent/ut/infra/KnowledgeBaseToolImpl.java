@@ -26,7 +26,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class KnowledgeBaseToolImpl implements KnowledgeBaseTool {
+import dev.langchain4j.agent.tool.Tool;
+
+public class KnowledgeBaseToolImpl implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseToolImpl.class);
 
     private EmbeddingStore<TextSegment> embeddingStore;
@@ -100,7 +102,7 @@ public class KnowledgeBaseToolImpl implements KnowledgeBaseTool {
         }
     }
 
-    @Override
+    @Tool("Search for information in the knowledge base. Use this to find existing unit test examples, coding guidelines, or project-specific patterns to ensure generated tests match the project style.")
     public String searchKnowledge(String query) {
         if (!isInitialized) {
             return fallbackSearch(query);
