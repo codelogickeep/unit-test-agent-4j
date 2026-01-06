@@ -2,7 +2,9 @@ package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.infra.AgentTool;
-import com.codelogickeep.agent.ut.infra.KnowledgeBaseToolImpl;
+import com.codelogickeep.agent.ut.infra.KnowledgeBaseTool;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.agent.tool.ToolSpecifications;
 import org.reflections.Reflections;
 import org.reflections.scanners.Scanners;
 import org.reflections.util.ClasspathHelper;
@@ -40,8 +42,8 @@ public class ToolFactory {
                 log.debug("Found Agent Tool: {}", clazz.getSimpleName());
 
                 // Special initialization for KnowledgeBaseTool
-                if (instance instanceof KnowledgeBaseToolImpl) {
-                    ((KnowledgeBaseToolImpl) instance).init(appConfig, knowledgeBasePath);
+                if (instance instanceof KnowledgeBaseTool) {
+                    ((KnowledgeBaseTool) instance).init(appConfig, knowledgeBasePath);
                 }
 
                 // Register Tool Directly (No Governance Proxy)
@@ -53,6 +55,24 @@ public class ToolFactory {
             }
         }
         
+        printToolSpecifications(tools);
         return tools;
+    }
+
+    private static void printToolSpecifications(List<Object> tools) {
+        System.out.println(">>> Loaded Tools & Specifications:");
+        for (Object tool : tools) {
+            System.out.println("--------------------------------------------------");
+            System.out.println("Tool Class: " + tool.getClass().getSimpleName());
+            List<ToolSpecification> specs = ToolSpecifications.toolSpecificationsFrom(tool);
+            for (ToolSpecification spec : specs) {
+                System.out.println("  Function: " + spec.name());
+                if (spec.description() != null) {
+                    System.out.println("  Description: " + spec.description());
+                }
+                System.out.println("  Parameters: " + spec.parameters());
+            }
+        }
+        System.out.println("--------------------------------------------------");
     }
 }

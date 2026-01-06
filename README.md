@@ -2,14 +2,11 @@
 
 企业级 Java 单元测试智能体 (Agent)，专注于为遗留系统 (Legacy Code) 自动生成高质量的 JUnit 5 + Mockito 测试代码。
 
-采用 **"Governance-by-Design"** 架构，内置工具治理中间件，对 AI 的所有工具调用（文件读写、命令执行）进行透明的权限拦截和安全治理，确保企业资产安全。
-
 ## 核心特性
 
-- **安全治理**: 严格限制 AI 的文件写权限（仅限 `src/test`）和命令执行权限，内置 SpEL 规则引擎。
 - **智能分析**: 基于 AST 分析代码结构，自动识别依赖并生成 Mock。
-- **动态工具加载**: 运行时自动扫描并加载工具集，基于接口自动生成安全代理。
-- **丰富工具集**: 内置文件操作、目录遍历、代码分析、Maven 执行、覆盖率检查等多种工具。
+- **动态工具加载**: 运行时自动扫描并加载工具集。
+- **丰富工具集**: 内置文件操作、目录遍历、代码分析、Maven 执行、覆盖率检查、RAG 知识库检索等多种工具。
 - **自我修复**: 自动运行测试，分析错误日志并进行自我修正。
 - **标准化**: 生成符合 JUnit 5 和 Mockito 标准的测试代码。
 - **多模型支持**: 兼容 DeepSeek、OpenAI 以及任何兼容 OpenAI API 格式的大模型服务（如阿里云百炼）。基于 LangChain4j 1.10.0 构建。
@@ -20,7 +17,7 @@
 
 - JDK 21+
 - Maven 3.8+
-- 设置 `AGENT_API_KEY` 环境变量
+- 设置 API Key（见下文）
 
 ### 构建项目
 
@@ -32,32 +29,52 @@ mvn clean package
 
 ### 运行
 
-使用默认配置运行（默认查找当前目录 `agent.yml` 或 `config.yml`）：
+#### 1. 配置
+
+您可以使用 `config` 命令来设置 API Key 和其他选项。配置将保存在 JAR 包同级目录下的 `agent.yml` 中。
 
 ```bash
-export AGENT_API_KEY="sk-your-api-key"
-java -jar target/unit-test-agent-4j-0.1.0-INIT-shaded.jar --target src/main/java/com/example/MyService.java
+java -jar target/unit-test-agent-4j-0.1.0-INIT-shaded.jar config \
+  --api-key "sk-your-api-key" \
+  --base-url "https://api.deepseek.com" \
+  --model "deepseek-coder"
 ```
 
-指定自定义配置文件：
+#### 2. 生成测试
 
 ```bash
 java -jar target/unit-test-agent-4j-0.1.0-INIT-shaded.jar \
-  --config my-agent-config.yml \
-  --target src/main/java/com/example/LegacyService.java
+  --target src/main/java/com/example/MyService.java
+```
+
+#### 3. 运行时覆盖
+
+您也可以在运行时直接指定参数，并选择是否保存到配置文件：
+
+```bash
+# 仅本次运行生效
+java -jar target/unit-test-agent-4j-0.1.0-INIT-shaded.jar \
+  --target src/main/java/com/example/MyService.java \
+  --model "gpt-4"
+
+# 运行并更新配置文件 (--save)
+java -jar target/unit-test-agent-4j-0.1.0-INIT-shaded.jar \
+  --target src/main/java/com/example/MyService.java \
+  --api-key "new-key" \
+  --save
 ```
 
 ## 配置指南
 
 Agent 支持多级配置加载机制，优先级如下：
-1. 命令行参数 (`--config`)
-2. 当前目录 (`./config.yml`, `./agent.yml`)
-3. 用户主目录 (`~/.unit-test-agent/config.yml`, `~/.unit-test-agent/agent.yml`)
-4. Classpath 默认配置
+1. 命令行参数 (`--api-key`, `--model`, `--base-url`)
+2. CLI 指定配置文件 (`--config`)
+3. **JAR 包所在目录 (`agent.yml`) - 推荐全局配置位置**
+4. 当前运行目录 (`./config.yml`, `./agent.yml`)
+5. 用户主目录 (`~/.unit-test-agent/config.yml`)
+6. Classpath 默认配置
 
-**注意：** 治理策略 (`governance.yml`) 现已内置，用户不可修改。
-
-### 1. 应用配置 (`agent.yml` / `config.yml`)
+### 应用配置 (`agent.yml`)
 
 ```yaml
 # LLM 设置 兼容 openAI
@@ -76,34 +93,12 @@ workflow:
   dryRun: false
 ```
 
-### 2. 治理策略 (`governance.yml`)
-
-```yaml
-enabled: true
-policy:
-  # 规则1: 允许读取 src 目录下的所有文件 (用于代码分析)
-  - resource: "file-read"
-    action: "ALLOW"
-    condition: "path.startsWith('src/')"
-    
-  # 规则2: 仅允许写入 src/test 目录 (核心安全策略)
-  - resource: "file-write"
-    action: "ALLOW"
-    condition: "path.contains('/src/test/java/')"
-    
-  # 规则3: 仅允许执行 mvn test 命令，且限制类名格式 (支持内部类 $, 方法 #, 通配符 *)
-  - resource: "shell-exec"
-    action: "ALLOW"
-    condition: "testClassName.matches('[a-zA-Z0-9_$.#*-]+')"
-```
-
 ## 开发架构
 
-系统采用 **Agent-Middleware-Tool** 三层架构：
+系统采用 **Agent-Tool** 架构：
 
 1.  **Agent Layer**: 负责推理和任务编排 (LangChain4j)。
-2.  **Governance Layer**: 内置透明代理层，拦截并校验所有工具调用 (ToolGovernanceProxy + SpEL)。
-3.  **Infrastructure Layer**: 实际执行文件操作和命令的工具 (FileSystemTool, MavenExecutorTool)。
+2.  **Infrastructure Layer**: 实际执行文件操作和命令的工具 (FileSystemTool, MavenExecutorTool)。
 
 ```mermaid
 graph TD
@@ -115,32 +110,21 @@ graph TD
         LLM["LangChain4j Service"]
     end
     
-    subgraph "Governance Layer (The Guard)"
-        Proxy["Tool Governance Proxy"]
-        Rules["Governance Rules (SpEL)"]
-    end
-    
     subgraph "Infrastructure Layer (The Hands)"
         Scanner["Code Analyzer (AST)"]
         Writer["File System Tool"]
         Runner["Maven Executor"]
         Dir["Directory Tool"]
         Coverage["Coverage Tool"]
+        KB["Knowledge Base Tool (RAG)"]
     end
     
     CLI --> Orchestrator
     Orchestrator -->|1. Reason| LLM
-    LLM -->|2. Call Tool| Proxy
-    
-    %% The Interception Logic
-    Proxy -->|3a. Check Permission| Rules
-    Rules --Allowed--> Proxy
-    Rules --Denied--> Orchestrator
-    
-    Proxy -->|3b. Execute| Scanner
-    Proxy -->|3b. Execute| Writer
-    Proxy -->|3b. Execute| Runner
-    Proxy -->|3b. Execute| Dir
-    Proxy -->|3b. Execute| Coverage
-
+    LLM -->|2. Call Tool| Scanner
+    LLM -->|2. Call Tool| Writer
+    LLM -->|2. Call Tool| Runner
+    LLM -->|2. Call Tool| Dir
+    LLM -->|2. Call Tool| Coverage
+    LLM -->|2. Call Tool| KB
 ```

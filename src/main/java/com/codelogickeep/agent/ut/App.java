@@ -8,6 +8,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,7 +18,8 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 @Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "0.1.0",
-        description = "AI Agent for generating JUnit 5 tests.")
+        description = "AI Agent for generating JUnit 5 tests.",
+        subcommands = {App.ConfigCommand.class})
 public class App implements Callable<Integer> {
 
     @Option(names = {"-t", "--target"}, description = "Target Java file to test")
@@ -31,6 +33,18 @@ public class App implements Callable<Integer> {
 
     @Option(names = {"-kb", "--knowledge-base"}, description = "Path to existing unit tests (directory or file) to learn coding style and patterns.")
     private String knowledgeBasePath;
+
+    @Option(names = {"--api-key"}, description = "Override LLM API Key for this run")
+    private String apiKey;
+
+    @Option(names = {"--base-url"}, description = "Override LLM Base URL for this run")
+    private String baseUrl;
+
+    @Option(names = {"--model"}, description = "Override LLM Model Name for this run")
+    private String modelName;
+
+    @Option(names = {"--save"}, description = "Save the overridden configuration to agent.yml")
+    private boolean saveConfig;
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -47,6 +61,33 @@ public class App implements Callable<Integer> {
     public Integer call() throws Exception {
         // 1. Load Configurations
         AppConfig config = loadAppConfig();
+
+        // 1.1 Apply CLI Overrides
+        if (config.getLlm() == null) {
+            config.setLlm(new AppConfig.LlmConfig());
+        }
+        if (apiKey != null) {
+            config.getLlm().setApiKey(apiKey);
+        }
+        if (baseUrl != null) {
+            config.getLlm().setBaseUrl(baseUrl);
+        }
+        if (modelName != null) {
+            config.getLlm().setModelName(modelName);
+        }
+
+        // 1.2 Save Config if requested
+        if (saveConfig) {
+            ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+            mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+            File configFile = new File(getJarDir(), "agent.yml");
+            try {
+                mapper.writeValue(configFile, config);
+                System.out.println(">>> Configuration saved to " + configFile.getAbsolutePath());
+            } catch (IOException e) {
+                System.err.println("Warning: Failed to save configuration: " + e.getMessage());
+            }
+        }
 
         if (checkEnv) {
             com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config);
@@ -86,6 +127,14 @@ public class App implements Callable<Integer> {
         }
     }
 
+    private static File getJarDir() {
+        try {
+            return new File(App.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile();
+        } catch (Exception e) {
+            return new File(".");
+        }
+    }
+
     private AppConfig loadAppConfig() throws IOException {
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         AppConfig config = null;
@@ -98,7 +147,12 @@ public class App implements Callable<Integer> {
             }
         }
 
-        // 2. Current Directory (config.yml or agent.yml)
+        // 2. JAR Directory (agent.yml) - Priority for global config
+        if (config == null) {
+            config = tryLoad(mapper, new File(getJarDir(), "agent.yml"), AppConfig.class);
+        }
+
+        // 3. Current Directory (config.yml or agent.yml)
         if (config == null) {
             config = tryLoad(mapper, new File("config.yml"), AppConfig.class);
         }
@@ -151,5 +205,72 @@ public class App implements Callable<Integer> {
             }
         }
         return null;
+    }
+
+    @Command(name = "config", description = "Configure agent settings (saved to agent.yml in current directory)")
+    public static class ConfigCommand implements Callable<Integer> {
+
+        @Option(names = {"--api-key"}, description = "Set the LLM API Key")
+        private String apiKey;
+
+        @Option(names = {"--base-url"}, description = "Set the LLM Base URL")
+        private String baseUrl;
+
+        @Option(names = {"--model"}, description = "Set the LLM Model Name")
+        private String modelName;
+
+        @Override
+        public Integer call() throws Exception {
+            File configFile = new File(getJarDir(), "agent.yml");
+            ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+            mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+            AppConfig config = null;
+            boolean isNew = !configFile.exists();
+            if (configFile.exists()) {
+                try {
+                    config = mapper.readValue(configFile, AppConfig.class);
+                } catch (IOException e) {
+                    System.err.println("Warning: Failed to parse existing agent.yml, creating new one.");
+                }
+            }
+
+            if (config == null) {
+                config = new AppConfig();
+                isNew = true;
+            }
+            if (config.getLlm() == null) {
+                config.setLlm(new AppConfig.LlmConfig());
+            }
+
+            boolean changed = false;
+            if (apiKey != null) {
+                config.getLlm().setApiKey(apiKey);
+                changed = true;
+            }
+            if (baseUrl != null) {
+                config.getLlm().setBaseUrl(baseUrl);
+                changed = true;
+            }
+            if (modelName != null) {
+                config.getLlm().setModelName(modelName);
+                changed = true;
+            }
+
+            if (changed || isNew) {
+                mapper.writeValue(configFile, config);
+                if (isNew) {
+                    System.out.println("Initialized new configuration at " + configFile.getAbsolutePath());
+                } else {
+                    System.out.println("Configuration saved to " + configFile.getAbsolutePath());
+                }
+            } else {
+                System.out.println("Current configuration (" + configFile.getAbsolutePath() + "):");
+                System.out.println(mapper.writeValueAsString(config));
+                System.out.println();
+                System.out.println("No changes specified. Use --api-key, --base-url, or --model options to update.");
+            }
+            return 0;
+        }
     }
 }
