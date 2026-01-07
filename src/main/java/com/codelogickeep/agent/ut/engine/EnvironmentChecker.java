@@ -11,12 +11,23 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class EnvironmentChecker {
 
     public static void check(AppConfig config) {
         System.out.println("\n>>> Starting Environment Check...\n");
+
+        if (config.getLlm() != null) {
+            System.out.println("LLM Protocol: " + config.getLlm().getProtocol());
+            System.out.println("LLM Model:    " + config.getLlm().getModelName());
+            System.out.println("Temperature:  " + config.getLlm().getTemperature());
+        }
+        if (config.getWorkflow() != null) {
+            System.out.println("Max Retries:  " + config.getWorkflow().getMaxRetries());
+        }
+        System.out.println();
 
         boolean mvnOk = checkMaven();
         boolean llmOk = checkLlm(config);
@@ -67,28 +78,48 @@ public class EnvironmentChecker {
             return false;
         }
 
-        // 这段代码测试llm服务是否可用，并检查配置是否正确。
         try {
             if (config.getLlm().getApiKey() == null || config.getLlm().getApiKey().isEmpty()) {
                 System.out.println("FAILED (Missing API Key)");
                 return false;
             }
-            // 尽量尝试创建 LLM client 并发起一次基础的请求，以检测服务连通性
+            
             LlmClient llmClient = new LlmClient(config.getLlm());
             StreamingChatModel model = llmClient.createStreamingModel();
-            // 由于是流式模型，我们发送一个简单的completion请求，如果失败抛异常
-            // 这里只做连接测试，不关心结果
+            
+            CountDownLatch latch = new CountDownLatch(1);
+            final boolean[] success = {false};
+            final String[] error = {null};
+
             model.chat("ping", new StreamingChatResponseHandler() {
                 @Override
-                public void onError(Throwable t) {
-                    System.out.println("FAILED (" + t.getMessage() + ")");
-                }
+                public void onPartialResponse(String token) {}
+
                 @Override
-                public void onCompleteResponse(ChatResponse arg0) {
-                    System.out.println("OK (Configuration is valid and LLM is reachable)");
+                public void onCompleteResponse(ChatResponse response) {
+                    success[0] = true;
+                    latch.countDown();
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    error[0] = (t.getMessage() != null && !t.getMessage().isEmpty()) ? t.getMessage() : t.toString();
+                    latch.countDown();
                 }
             });
-            return true;
+
+            if (latch.await(30, TimeUnit.SECONDS)) {
+                if (success[0]) {
+                    System.out.println("OK (Configuration is valid and LLM is reachable)");
+                    return true;
+                } else {
+                    System.out.println("FAILED (" + error[0] + ")");
+                    return false;
+                }
+            } else {
+                System.out.println("FAILED (Timed out waiting for LLM response)");
+                return false;
+            }
         } catch (Exception e) {
             System.out.println("FAILED (" + e.getMessage() + ")");
             return false;

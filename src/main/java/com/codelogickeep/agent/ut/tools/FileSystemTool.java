@@ -22,7 +22,8 @@ public class FileSystemTool implements AgentTool {
         return Files.exists(p) && Files.isRegularFile(p);
     }
 
-    public String readFile(String path) throws IOException {
+    @Tool("Read the content of a file.")
+    public String readFile(@P("Path to the file to read") String path) throws IOException {
         log.info("Reading file: {}", path);
         Path p = Paths.get(path);
         if (!Files.exists(p)) {

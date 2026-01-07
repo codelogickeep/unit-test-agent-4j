@@ -1,5 +1,6 @@
 package com.codelogickeep.agent.ut.config;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.Map;
 import java.util.List;
@@ -14,7 +15,14 @@ public class AppConfig {
 
     @Data
     public static class LlmConfig {
-        private String provider;
+        @JsonProperty("protocol")
+        private String protocol;
+
+        @JsonProperty("provider")
+        public void setProvider(String provider) {
+            this.protocol = provider;
+        }
+
         private String apiKey;
         private String modelName;
         private Double temperature;

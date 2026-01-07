@@ -16,4 +16,5 @@ target/
 doc/
 test-config.yml
 test-governance.yml
+cp.txt
 

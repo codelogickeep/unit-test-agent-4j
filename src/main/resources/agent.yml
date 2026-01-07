@@ -1,15 +1,15 @@
 # LLM Settings
 llm:
-  provider: "deepseek" # deepseek | openai
+  protocol: "openai" # openai | anthropic | gemini
   apiKey: "${env:UT_AGENT_API_KEY}"
   baseUrl: "${env:UT_AGENT_BASE_URL}"
   modelName: "${env:UT_AGENT_MODEL_NAME}"
-  temperature: 0.1
+  temperature: 0.5
   timeout: 120
 
 # Workflow Settings
 workflow:
-  maxRetries: 3
+  maxRetries: 5
 
 # Prompts Configuration
 prompts:

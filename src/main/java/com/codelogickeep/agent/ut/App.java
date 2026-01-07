@@ -34,6 +34,9 @@ public class App implements Callable<Integer> {
     @Option(names = {"-kb", "--knowledge-base"}, description = "Path to existing unit tests (directory or file) to learn coding style and patterns.")
     private String knowledgeBasePath;
 
+    @Option(names = {"--protocol"}, description = "Override LLM Protocol for this run (openai, anthropic, gemini)")
+    private String protocol;
+
     @Option(names = {"--api-key"}, description = "Override LLM API Key for this run")
     private String apiKey;
 
@@ -42,6 +45,12 @@ public class App implements Callable<Integer> {
 
     @Option(names = {"--model"}, description = "Override LLM Model Name for this run")
     private String modelName;
+
+    @Option(names = {"--temperature"}, description = "Override LLM Temperature for this run")
+    private Double temperature;
+
+    @Option(names = {"--max-retries"}, description = "Override Max Retries for this run")
+    private Integer maxRetries;
 
     @Option(names = {"--save"}, description = "Save the overridden configuration to agent.yml")
     private boolean saveConfig;
@@ -66,6 +75,9 @@ public class App implements Callable<Integer> {
         if (config.getLlm() == null) {
             config.setLlm(new AppConfig.LlmConfig());
         }
+        if (protocol != null) {
+            config.getLlm().setProtocol(protocol);
+        }
         if (apiKey != null) {
             config.getLlm().setApiKey(apiKey);
         }
@@ -75,15 +87,40 @@ public class App implements Callable<Integer> {
         if (modelName != null) {
             config.getLlm().setModelName(modelName);
         }
+        if (temperature != null) {
+            config.getLlm().setTemperature(temperature);
+        }
+        
+        if (config.getWorkflow() == null) {
+            config.setWorkflow(new AppConfig.WorkflowConfig());
+        }
+        if (maxRetries != null) {
+            config.getWorkflow().setMaxRetries(maxRetries);
+        }
 
-        // 1.2 Save Config if requested
-        if (saveConfig) {
+        // Apply Defaults if still null
+        boolean needsSave = false;
+        if (config.getLlm().getTemperature() == null) {
+            config.getLlm().setTemperature(0.1);
+            needsSave = true;
+        }
+        if (config.getWorkflow() == null) {
+            config.setWorkflow(new AppConfig.WorkflowConfig());
+            needsSave = true;
+        }
+        if (config.getWorkflow().getMaxRetries() <= 0 && maxRetries == null) {
+            config.getWorkflow().setMaxRetries(3);
+            needsSave = true;
+        }
+
+        // 1.2 Save Config if requested or if defaults were applied to a non-existent config
+        if (saveConfig || (needsSave && !new File(getJarDir(), "agent.yml").exists())) {
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
             File configFile = new File(getJarDir(), "agent.yml");
             try {
                 mapper.writeValue(configFile, config);
-                System.out.println(">>> Configuration saved to " + configFile.getAbsolutePath());
+                System.out.println(">>> Configuration updated with defaults and saved to " + configFile.getAbsolutePath());
             } catch (IOException e) {
                 System.err.println("Warning: Failed to save configuration: " + e.getMessage());
             }
@@ -120,6 +157,11 @@ public class App implements Callable<Integer> {
             System.out.println(">>> Agent finished.");
             
             return 0;
+        } catch (IllegalArgumentException e) {
+            System.err.println("Configuration Error: " + e.getMessage());
+            System.err.println();
+            new CommandLine(this).usage(System.err);
+            return 1;
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
@@ -165,6 +207,7 @@ public class App implements Callable<Integer> {
 
         // Environment variable substitution
         if (config.getLlm() != null) {
+            config.getLlm().setProtocol(replaceEnvVars(config.getLlm().getProtocol()));
             config.getLlm().setApiKey(replaceEnvVars(config.getLlm().getApiKey()));
             config.getLlm().setBaseUrl(replaceEnvVars(config.getLlm().getBaseUrl()));
             config.getLlm().setModelName(replaceEnvVars(config.getLlm().getModelName()));
@@ -203,6 +246,9 @@ public class App implements Callable<Integer> {
     @Command(name = "config", description = "Configure agent settings (saved to agent.yml in current directory)")
     public static class ConfigCommand implements Callable<Integer> {
 
+        @Option(names = {"--protocol"}, description = "Set the LLM Protocol (openai, anthropic, gemini)")
+        private String protocol;
+
         @Option(names = {"--api-key"}, description = "Set the LLM API Key")
         private String apiKey;
 
@@ -211,6 +257,12 @@ public class App implements Callable<Integer> {
 
         @Option(names = {"--model"}, description = "Set the LLM Model Name")
         private String modelName;
+
+        @Option(names = {"--temperature"}, description = "Set the LLM Temperature")
+        private Double temperature;
+
+        @Option(names = {"--max-retries"}, description = "Set the Max Retries for workflow")
+        private Integer maxRetries;
 
         @Override
         public Integer call() throws Exception {
@@ -237,6 +289,10 @@ public class App implements Callable<Integer> {
             }
 
             boolean changed = false;
+            if (protocol != null) {
+                config.getLlm().setProtocol(protocol);
+                changed = true;
+            }
             if (apiKey != null) {
                 config.getLlm().setApiKey(apiKey);
                 changed = true;
@@ -247,6 +303,18 @@ public class App implements Callable<Integer> {
             }
             if (modelName != null) {
                 config.getLlm().setModelName(modelName);
+                changed = true;
+            }
+            if (temperature != null) {
+                config.getLlm().setTemperature(temperature);
+                changed = true;
+            }
+
+            if (config.getWorkflow() == null) {
+                config.setWorkflow(new AppConfig.WorkflowConfig());
+            }
+            if (maxRetries != null) {
+                config.getWorkflow().setMaxRetries(maxRetries);
                 changed = true;
             }
 
