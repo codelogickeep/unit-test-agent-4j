@@ -137,74 +137,67 @@ public class App implements Callable<Integer> {
 
     private AppConfig loadAppConfig() throws IOException {
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-        AppConfig config = null;
+        AppConfig config = new AppConfig();
 
-        // 1. CLI Path
-        if (configPath != null) {
-            File f = new File(configPath);
-            if (f.exists()) {
-                config = mapper.readValue(f, AppConfig.class);
+        // 1. Classpath (agent.yml) - Base defaults
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream("agent.yml")) {
+            if (in != null) {
+                mapper.readerForUpdating(config).readValue(in);
             }
         }
 
-        // 2. JAR Directory (agent.yml) - Priority for global config
-        if (config == null) {
-            config = tryLoad(mapper, new File(getJarDir(), "agent.yml"), AppConfig.class);
-        }
+        // 2. User Home (~/.unit-test-agent/)
+        String userHome = System.getProperty("user.home");
+        mergeConfigFromFile(mapper, config, Paths.get(userHome, ".unit-test-agent", "config.yml").toFile());
+        mergeConfigFromFile(mapper, config, Paths.get(userHome, ".unit-test-agent", "agent.yml").toFile());
 
         // 3. Current Directory (config.yml or agent.yml)
-        if (config == null) {
-            config = tryLoad(mapper, new File("config.yml"), AppConfig.class);
-        }
-        if (config == null) {
-            config = tryLoad(mapper, new File("agent.yml"), AppConfig.class);
-        }
+        mergeConfigFromFile(mapper, config, new File("config.yml"));
+        mergeConfigFromFile(mapper, config, new File("agent.yml"));
 
-        // 3. User Home (~/.unit-test-agent/)
-        if (config == null) {
-            String userHome = System.getProperty("user.home");
-            config = tryLoad(mapper, Paths.get(userHome, ".unit-test-agent", "config.yml").toFile(), AppConfig.class);
-        }
-        if (config == null) {
-            String userHome = System.getProperty("user.home");
-            config = tryLoad(mapper, Paths.get(userHome, ".unit-test-agent", "agent.yml").toFile(), AppConfig.class);
-        }
+        // 4. JAR Directory (agent.yml) - Priority for global config
+        mergeConfigFromFile(mapper, config, new File(getJarDir(), "agent.yml"));
 
-        // 4. Classpath (agent.yml)
-        if (config == null) {
-            try (InputStream in = getClass().getClassLoader().getResourceAsStream("agent.yml")) {
-                if (in != null) {
-                    config = mapper.readValue(in, AppConfig.class);
-                }
-            }
-        }
-
-        if (config == null) {
-            throw new IOException("Could not find agent configuration file.");
+        // 5. CLI Path - Highest priority
+        if (configPath != null) {
+            mergeConfigFromFile(mapper, config, new File(configPath));
         }
 
         // Environment variable substitution
-        if (config.getLlm() != null && config.getLlm().getApiKey() != null 
-                && config.getLlm().getApiKey().startsWith("${env:")) {
-            String envVar = config.getLlm().getApiKey().substring(6, config.getLlm().getApiKey().length() - 1);
-            String value = System.getenv(envVar);
-            if (value != null) {
-                config.getLlm().setApiKey(value);
-            }
+        if (config.getLlm() != null) {
+            config.getLlm().setApiKey(replaceEnvVars(config.getLlm().getApiKey()));
+            config.getLlm().setBaseUrl(replaceEnvVars(config.getLlm().getBaseUrl()));
+            config.getLlm().setModelName(replaceEnvVars(config.getLlm().getModelName()));
         }
 
         return config;
     }
 
-    private <T> T tryLoad(ObjectMapper mapper, File file, Class<T> clazz) {
+    private void mergeConfigFromFile(ObjectMapper mapper, AppConfig config, File file) {
         if (file.exists()) {
             try {
-                return mapper.readValue(file, clazz);
+                mapper.readerForUpdating(config).readValue(file);
+                System.out.println(">>> Merged configuration from " + file.getAbsolutePath());
             } catch (IOException e) {
-                System.err.println("Warning: Failed to read config from " + file.getAbsolutePath() + ": " + e.getMessage());
+                System.err.println("Warning: Failed to merge config from " + file.getAbsolutePath() + ": " + e.getMessage());
             }
         }
-        return null;
+    }
+
+    private String replaceEnvVars(String value) {
+        if (value == null || !value.contains("${env:")) {
+            return value;
+        }
+        
+        // Simple regex-less replacement for multiple env vars if needed, 
+        // but current logic assumes the whole string might be an env var placeholder
+        if (value.startsWith("${env:") && value.endsWith("}")) {
+            String envVar = value.substring(6, value.length() - 1);
+            String envValue = System.getenv(envVar);
+            return envValue != null ? envValue : value;
+        }
+        
+        return value;
     }
 
     @Command(name = "config", description = "Configure agent settings (saved to agent.yml in current directory)")
@@ -274,3 +267,4 @@ public class App implements Callable<Integer> {
         }
     }
 }
+

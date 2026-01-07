@@ -112,16 +112,18 @@ public class AgentOrchestrator {
                 String resourcePath = pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
                 try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
                     if (in != null) {
+                        log.info("Loaded system prompt from classpath: {}", resourcePath);
                         return new String(in.readAllBytes(), StandardCharsets.UTF_8);
                     }
                 }
                 
-                log.warn("System prompt file not found at: {}. Using default.", pathStr);
+                log.warn("System prompt file not found at: {}. Using default fallback prompt.", pathStr);
             } catch (IOException e) {
-                log.warn("Failed to load system prompt from {}. Using default.", pathStr, e);
+                log.warn("Failed to load system prompt from {}. Using default fallback prompt.", pathStr, e);
             }
         }
         
+        log.info("Using default hardcoded system prompt.");
         return defaultPrompt;
     }
 

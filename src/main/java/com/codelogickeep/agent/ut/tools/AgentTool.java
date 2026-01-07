@@ -1,4 +1,4 @@
-package com.codelogickeep.agent.ut.infra;
+package com.codelogickeep.agent.ut.tools;
 
 /**
  * Marker interface for all Agent Tools.

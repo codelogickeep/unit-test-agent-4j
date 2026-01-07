@@ -1,4 +1,4 @@
-package com.codelogickeep.agent.ut.infra;
+package com.codelogickeep.agent.ut.tools;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -12,12 +12,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.stream.Collectors;
 
+import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CodeAnalyzerTool implements AgentTool {
+    private static final Logger log = LoggerFactory.getLogger(CodeAnalyzerTool.class);
 
     @Tool("Analyze a Java class structure to understand methods and fields")
-    public String analyzeClass(String path) throws IOException {
+    public String analyzeClass(@P("Path to the Java source file") String path) throws IOException {
+        log.info("Analyzing class structure: {}", path);
         Path sourcePath = Paths.get(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 

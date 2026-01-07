@@ -1,4 +1,4 @@
-package com.codelogickeep.agent.ut.infra;
+package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
 import dev.langchain4j.data.document.Document;
@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 
 public class KnowledgeBaseTool implements AgentTool {
@@ -103,7 +104,8 @@ public class KnowledgeBaseTool implements AgentTool {
     }
 
     @Tool("Search for information in the knowledge base. Use this to find existing unit test examples, coding guidelines, or project-specific patterns to ensure generated tests match the project style.")
-    public String searchKnowledge(String query) {
+    public String searchKnowledge(@P("Search query or keywords") String query) {
+        log.info("Searching knowledge base for: {}", query);
         if (!isInitialized) {
             return fallbackSearch(query);
         }

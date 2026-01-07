@@ -1,8 +1,6 @@
 package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import com.codelogickeep.agent.ut.infra.AgentTool;
-import com.codelogickeep.agent.ut.infra.KnowledgeBaseTool;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.agent.tool.ToolSpecifications;
 import org.reflections.Reflections;
@@ -25,7 +23,7 @@ public class ToolFactory {
         
         // Scan for implementations of AgentTool
         Reflections reflections = new Reflections(new ConfigurationBuilder()
-                .setUrls(ClasspathHelper.forPackage("com.codelogickeep.agent.ut.infra"))
+                .setUrls(ClasspathHelper.forPackage("com.codelogickeep.agent.ut.tools"))
                 .setScanners(Scanners.SubTypes));
 
         Set<Class<? extends AgentTool>> toolClasses = reflections.getSubTypesOf(AgentTool.class);

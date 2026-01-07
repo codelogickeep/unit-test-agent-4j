@@ -1,4 +1,4 @@
-package com.codelogickeep.agent.ut.infra;
+package com.codelogickeep.agent.ut.tools;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -7,17 +7,23 @@ import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.ArrayList;
+import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class FileSystemTool implements AgentTool {
+    private static final Logger log = LoggerFactory.getLogger(FileSystemTool.class);
 
     @Tool("Check if a file exists.")
-    public boolean fileExists(String path) {
+    public boolean fileExists(@P("Path to the file to check") String path) {
+        log.info("Checking if file exists: {}", path);
         Path p = Paths.get(path);
         return Files.exists(p) && Files.isRegularFile(p);
     }
 
     public String readFile(String path) throws IOException {
+        log.info("Reading file: {}", path);
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
             throw new IOException("File not found: " + path);
@@ -26,7 +32,8 @@ public class FileSystemTool implements AgentTool {
     }
 
     @Tool("Write content to a file. Create directories if they don't exist. Overwrites existing content.")
-    public void writeFile(String path, String content) throws IOException {
+    public void writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
+        log.info("Writing file: {}", path);
         Path p = Paths.get(path);
         // Ensure parent directories exist
         if (p.getParent() != null) {
@@ -36,7 +43,8 @@ public class FileSystemTool implements AgentTool {
     }
 
     @Tool("Replace content in a file starting from a specific line number (1-based) to the end. CAUTION: This truncates the file at startLine before writing.")
-    public void writeFileFromLine(String path, String content, int startLine) throws IOException {
+    public void writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
+        log.info("Writing file from line {}: {}", startLine, path);
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
             writeFile(path, content);

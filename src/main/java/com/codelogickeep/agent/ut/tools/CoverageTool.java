@@ -1,4 +1,4 @@
-package com.codelogickeep.agent.ut.infra;
+package com.codelogickeep.agent.ut.tools;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -12,12 +12,17 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CoverageTool implements AgentTool {
+    private static final Logger log = LoggerFactory.getLogger(CoverageTool.class);
 
     @Tool("Get the test coverage report summary (JaCoCo). Requires tests to be executed first.")
-    public String getCoverageReport(String modulePath) throws IOException {
+    public String getCoverageReport(@P("Path to the module directory where target/site/jacoco/jacoco.xml is located") String modulePath) throws IOException {
+        log.info("Reading coverage report for module: {}", modulePath);
         // Assume standard Maven structure: target/site/jacoco/jacoco.xml
         Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
         File xmlFile = reportPath.toFile();
