@@ -4,12 +4,22 @@ llm:
   apiKey: "${env:UT_AGENT_API_KEY}"
   baseUrl: "${env:UT_AGENT_BASE_URL}"
   modelName: "${env:UT_AGENT_MODEL_NAME}"
-  temperature: 0.5
+  temperature: 0.0
   timeout: 120
 
 # Workflow Settings
 workflow:
   maxRetries: 5
+
+# Recommended Dependencies & Minimum Versions
+dependencies:
+  junit-jupiter: "5.10.1"
+  mockito-core: "5.8.0"
+  mockito-junit-jupiter: "5.8.0"
+  mockito-inline: "5.8.0"
+  byte-buddy: "1.14.10"
+  objenesis: "3.3"
+  jacoco-maven-plugin: "0.8.11"
 
 # Prompts Configuration
 prompts:

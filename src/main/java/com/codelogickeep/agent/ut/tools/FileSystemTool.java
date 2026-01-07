@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.slf4j.Logger;
@@ -14,114 +15,123 @@ import org.slf4j.LoggerFactory;
 
 public class FileSystemTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(FileSystemTool.class);
+    private Path projectRoot = Paths.get(".").toAbsolutePath().normalize();
+
+    public void setProjectRoot(String rootPath) {
+        if (rootPath != null) {
+            this.projectRoot = Paths.get(rootPath).toAbsolutePath().normalize();
+            log.info("FileSystemTool project root locked to: {}", projectRoot);
+        }
+    }
+
+    private Path resolveSafePath(String pathStr) throws IOException {
+        if (pathStr == null || pathStr.trim().isEmpty() || "null".equalsIgnoreCase(pathStr)) {
+            throw new IOException("Path is null or empty. Please provide a valid file path relative to the project root.");
+        }
+        Path p = Paths.get(pathStr);
+        if (!p.isAbsolute()) {
+            p = projectRoot.resolve(p);
+        }
+        p = p.normalize();
+        if (!p.startsWith(projectRoot)) {
+            throw new IOException("Access denied: Path is outside of project root: " + pathStr);
+        }
+        return p;
+    }
+
+    @Tool("Replace the first occurrence of a specific string with a new string in a file. Use this for precise code fixes in Java or POM files.")
+    public String searchReplace(@P("Path to the file (relative to project root)") String path,
+                              @P("The exact string to be replaced") String oldString,
+                              @P("The new string to replace with") String newString) throws IOException {
+        log.info("Tool Input - searchReplace: path={}, oldString length={}, newString length={}", path, 
+                oldString != null ? oldString.length() : "null", 
+                newString != null ? newString.length() : "null");
+        try {
+            Path p = resolveSafePath(path);
+            if (!Files.exists(p)) {
+                return "ERROR: File not found at path: " + path + ". Ensure you are using a path relative to the project root: " + projectRoot;
+            }
+            String content = Files.readString(p, StandardCharsets.UTF_8);
+            if (!content.contains(oldString)) {
+                return "ERROR: oldString NOT FOUND. Please use 'readFile' to get the exact content first.";
+            }
+            String newContent = content.replaceFirst(Pattern.quote(oldString), newString);
+            Files.writeString(p, newContent, StandardCharsets.UTF_8);
+            return "SUCCESS: File updated: " + path;
+        } catch (Exception e) {
+            return "ERROR: " + e.getMessage();
+        }
+    }
 
     @Tool("Check if a file exists.")
     public boolean fileExists(@P("Path to the file to check") String path) {
-        log.info("Checking if file exists: {}", path);
-        Path p = Paths.get(path);
-        return Files.exists(p) && Files.isRegularFile(p);
+        log.info("Tool Input - fileExists: path={}", path);
+        try {
+            Path p = resolveSafePath(path);
+            return Files.exists(p) && Files.isRegularFile(p);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
-    @Tool("Read the content of a file.")
+    @Tool("Read the content of a file (e.g., source code, pom.xml, or error logs).")
     public String readFile(@P("Path to the file to read") String path) throws IOException {
-        log.info("Reading file: {}", path);
-        Path p = Paths.get(path);
-        if (!Files.exists(p)) {
-            throw new IOException("File not found: " + path);
-        }
-        return Files.readString(p, StandardCharsets.UTF_8);
-    }
-
-    @Tool("Write content to a file. Create directories if they don't exist. Overwrites existing content.")
-    public void writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
-        log.info("Writing file: {}", path);
-        Path p = Paths.get(path);
-        // Ensure parent directories exist
-        if (p.getParent() != null) {
-            Files.createDirectories(p.getParent());
-        }
-        Files.writeString(p, content, StandardCharsets.UTF_8);
-    }
-
-    @Tool("Replace content in a file starting from a specific line number (1-based) to the end. CAUTION: This truncates the file at startLine before writing.")
-    public void writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
-        log.info("Writing file from line {}: {}", startLine, path);
-        Path p = Paths.get(path);
-        if (!Files.exists(p)) {
-            writeFile(path, content);
-            return;
-        }
-
-        List<String> lines = Files.readAllLines(p, StandardCharsets.UTF_8);
-        List<String> newLines = new ArrayList<>();
-
-        // Add lines before startLine
-        for (int i = 0; i < Math.min(startLine - 1, lines.size()); i++) {
-            newLines.add(lines.get(i));
-        }
-
-        // If startLine is beyond current file size, pad with empty lines?
-        // Or just append? Let's pad with empty lines to reach startLine if necessary.
-        while (newLines.size() < startLine - 1) {
-            newLines.add("");
-        }
-
-        // Append the new content
-        // The content might be multi-line
-        newLines.add(content);
-
-        // Note: The user asked to "append/write code starting from line X".
-        // Often this means truncating whatever was after, or inserting.
-        // Given it's "write code", usually we are filling a file or appending a method.
-        // If we simply add 'content' as a single string, writeString handles newlines
-        // in it.
-        // But Files.write needs lines or bytes.
-
-        // Let's assume 'content' is the rest of the file content starting from
-        // startLine.
-        // Or should we keep existing lines after?
-        // "from line X... append code" usually means "starting at line X, put this
-        // code".
-        // I will interpret it as: Keep 1..(startLine-1), then append 'content'.
-        // Any previous content from startLine onwards is replaced/removed.
-
-        Files.writeString(p, String.join(System.lineSeparator(), newLines), StandardCharsets.UTF_8);
-
-        // Wait, String.join might mess up if I used add(content) and content has
-        // newlines.
-        // Better: Construct the full string.
-        StringBuilder sb = new StringBuilder();
-        for (String line : newLines) {
-            // Check if it's the last added element (the content)
-            if (line.equals(content) && newLines.indexOf(line) == newLines.size() - 1) {
-                sb.append(line);
-            } else {
-                sb.append(line).append(System.lineSeparator());
+        log.info("Tool Input - readFile: path={}", path);
+        try {
+            Path p = resolveSafePath(path);
+            if (!Files.exists(p)) {
+                throw new IOException("File not found: " + path);
             }
+            return Files.readString(p, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IOException(e.getMessage());
         }
-        // Actually, simpler:
-        // 1. Write the prefix (lines before startLine)
-        // 2. Append content
+    }
 
-        StringBuilder finalContent = new StringBuilder();
-        for (int i = 0; i < Math.min(startLine - 1, lines.size()); i++) {
-            finalContent.append(lines.get(i)).append(System.lineSeparator());
+    @Tool("Write content to a file. Useful for creating new test classes.")
+    public void writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
+        log.info("Tool Input - writeFile: path={}, content length={}", path, content != null ? content.length() : "null");
+        try {
+            Path p = resolveSafePath(path);
+            // Ensure parent directories exist
+            if (p.getParent() != null) {
+                Files.createDirectories(p.getParent());
+            }
+            Files.writeString(p, content, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IOException(e.getMessage());
         }
-        // Pad if needed
-        while (lines.size() < startLine - 1) { // logic error in loop check above? No.
-            // If lines.size() is 5, and startLine is 10.
-            // We appended 5 lines. We need 4 more empty lines to reach line 9 (so next is
-            // 10).
-            // Current finalContent has 5 lines.
-        }
-        // Actually, let's just stick to "Keep lines before startLine" + "Append new
-        // content".
+    }
 
-        finalContent.append(content);
+    @Tool("Replace content in a file starting from a specific line number.")
+    public void writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
+        log.info("Tool Input - writeFileFromLine: path={}, startLine={}, content length={}", path, startLine, content != null ? content.length() : "null");
+        try {
+            Path p = resolveSafePath(path);
+            if (!Files.exists(p)) {
+                writeFile(path, content);
+                return;
+            }
 
-        if (p.getParent() != null) {
-            Files.createDirectories(p.getParent());
+            List<String> lines = Files.readAllLines(p, StandardCharsets.UTF_8);
+            StringBuilder finalContent = new StringBuilder();
+            for (int i = 0; i < Math.min(startLine - 1, lines.size()); i++) {
+                finalContent.append(lines.get(i)).append(System.lineSeparator());
+            }
+            // Pad if needed
+            while (lines.size() < startLine - 1) {
+                finalContent.append(System.lineSeparator());
+                lines.add(""); 
+            }
+
+            finalContent.append(content);
+
+            if (p.getParent() != null) {
+                Files.createDirectories(p.getParent());
+            }
+            Files.writeString(p, finalContent.toString(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IOException(e.getMessage());
         }
-        Files.writeString(p, finalContent.toString(), StandardCharsets.UTF_8);
     }
 }

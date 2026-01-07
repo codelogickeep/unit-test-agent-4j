@@ -80,9 +80,19 @@ public class AgentOrchestrator {
                 log.info("Agent completed task. Result length: {}", result.length());
                 success = true;
             } catch (Exception e) {
-                log.error("Agent failed on attempt {}", attempt + 1, e);
                 attempt++;
-                if (attempt > maxRetries) {
+                log.error("Agent failed on attempt {}", attempt, e);
+                
+                if (attempt <= maxRetries) {
+                    long waitTime = (long) Math.pow(2, attempt) * 1000;
+                    log.info("Waiting {}ms before retrying...", waitTime);
+                    try {
+                        Thread.sleep(waitTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
                     log.error("Max retries reached. Aborting.");
                 }
             }

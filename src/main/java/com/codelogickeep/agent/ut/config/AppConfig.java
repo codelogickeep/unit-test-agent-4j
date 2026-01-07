@@ -12,6 +12,7 @@ public class AppConfig {
     private Map<String, String> prompts; // Key: prompt name (e.g. "system"), Value: file path
     private McpConfig mcp;
     private List<SkillConfig> skills;
+    private Map<String, String> dependencies; // New: key is artifactId, value is min version
 
     @Data
     public static class LlmConfig {
@@ -34,7 +35,6 @@ public class AppConfig {
     @Data
     public static class WorkflowConfig {
         private int maxRetries;
-        private boolean dryRun;
     }
     
     @Data

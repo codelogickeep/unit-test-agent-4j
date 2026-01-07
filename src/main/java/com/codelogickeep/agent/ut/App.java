@@ -2,6 +2,7 @@ package com.codelogickeep.agent.ut;
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
 import com.codelogickeep.agent.ut.engine.LlmClient;
+import com.codelogickeep.agent.ut.tools.FileSystemTool;
 import com.codelogickeep.agent.ut.tools.ToolFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -34,25 +35,25 @@ public class App implements Callable<Integer> {
     @Option(names = {"-kb", "--knowledge-base"}, description = "Path to existing unit tests (directory or file) to learn coding style and patterns.")
     private String knowledgeBasePath;
 
-    @Option(names = {"--protocol"}, description = "Override LLM Protocol for this run (openai, anthropic, gemini)")
+    @Option(names = {"--protocol"}, description = "Override LLM Protocol for this run (openai, anthropic, gemini). Does not save to config.")
     private String protocol;
 
-    @Option(names = {"--api-key"}, description = "Override LLM API Key for this run")
+    @Option(names = {"--api-key"}, description = "Override LLM API Key for this run. Does not save to config unless --save is used.")
     private String apiKey;
 
-    @Option(names = {"--base-url"}, description = "Override LLM Base URL for this run")
+    @Option(names = {"--base-url"}, description = "Override LLM Base URL for this run. Does not save to config unless --save is used.")
     private String baseUrl;
 
-    @Option(names = {"--model"}, description = "Override LLM Model Name for this run")
+    @Option(names = {"--model"}, description = "Override LLM Model Name for this run. Does not save to config unless --save is used.")
     private String modelName;
 
-    @Option(names = {"--temperature"}, description = "Override LLM Temperature for this run")
+    @Option(names = {"--temperature"}, description = "Override LLM Temperature for this run. Does not save to config.")
     private Double temperature;
 
-    @Option(names = {"--max-retries"}, description = "Override Max Retries for this run")
+    @Option(names = {"--max-retries"}, description = "Override Max Retries for this run. Does not save to config.")
     private Integer maxRetries;
 
-    @Option(names = {"--save"}, description = "Save the overridden configuration to agent.yml")
+    @Option(names = {"--save"}, description = "Save the overridden configuration (API Key, Base URL, Model) to agent.yml for future runs.")
     private boolean saveConfig;
 
     public static void main(String[] args) {
@@ -127,7 +128,8 @@ public class App implements Callable<Integer> {
         }
 
         if (checkEnv) {
-            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config);
+            String projectRoot = targetFile != null ? detectProjectRoot(targetFile) : null;
+            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
             return 0;
         }
         
@@ -141,6 +143,18 @@ public class App implements Callable<Integer> {
             // 4. Initialize AI Engine
             LlmClient llmClient = new LlmClient(config.getLlm());
             
+            // Detect Project Root (Directory containing pom.xml near target file)
+            String projectRoot = detectProjectRoot(targetFile);
+            
+            // Perform Project Audit at startup
+            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
+            
+            for (Object tool : tools) {
+                if (tool instanceof FileSystemTool) {
+                    ((FileSystemTool) tool).setProjectRoot(projectRoot);
+                }
+            }
+
             AgentOrchestrator orchestrator = new AgentOrchestrator(
                     config,
                     llmClient.createStreamingModel(),
@@ -167,6 +181,20 @@ public class App implements Callable<Integer> {
             e.printStackTrace();
             return 1;
         }
+    }
+
+    private String detectProjectRoot(String targetFilePath) {
+        if (targetFilePath == null) return ".";
+        File file = new File(targetFilePath).getAbsoluteFile();
+        File current = file.isDirectory() ? file : file.getParentFile();
+        
+        while (current != null) {
+            if (new File(current, "pom.xml").exists()) {
+                return current.getAbsolutePath();
+            }
+            current = current.getParentFile();
+        }
+        return ".";
     }
 
     private static File getJarDir() {
@@ -243,25 +271,29 @@ public class App implements Callable<Integer> {
         return value;
     }
 
-    @Command(name = "config", description = "Configure agent settings (saved to agent.yml in current directory)")
+    @Command(name = "config", 
+            mixinStandardHelpOptions = true,
+            description = "Configure and persist agent settings to agent.yml.",
+            header = "Agent Configuration Utility",
+            optionListHeading = "%nOptions:%n")
     public static class ConfigCommand implements Callable<Integer> {
 
-        @Option(names = {"--protocol"}, description = "Set the LLM Protocol (openai, anthropic, gemini)")
+        @Option(names = {"--protocol"}, description = "Set the LLM Protocol. Supported: openai, anthropic, gemini.")
         private String protocol;
 
-        @Option(names = {"--api-key"}, description = "Set the LLM API Key")
+        @Option(names = {"--api-key"}, description = "Set the LLM API Key for authentication.")
         private String apiKey;
 
-        @Option(names = {"--base-url"}, description = "Set the LLM Base URL")
+        @Option(names = {"--base-url"}, description = "Set the LLM Base URL (e.g., https://api.openai.com/v1).")
         private String baseUrl;
 
-        @Option(names = {"--model"}, description = "Set the LLM Model Name")
+        @Option(names = {"--model"}, description = "Set the LLM Model Name (e.g., gpt-4, gemini-pro).")
         private String modelName;
 
-        @Option(names = {"--temperature"}, description = "Set the LLM Temperature")
+        @Option(names = {"--temperature"}, description = "Set the LLM sampling temperature (0.0 to 1.0).")
         private Double temperature;
 
-        @Option(names = {"--max-retries"}, description = "Set the Max Retries for workflow")
+        @Option(names = {"--max-retries"}, description = "Set the maximum number of retries for the workflow.")
         private Integer maxRetries;
 
         @Override

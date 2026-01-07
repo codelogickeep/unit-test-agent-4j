@@ -22,7 +22,7 @@ public class CodeAnalyzerTool implements AgentTool {
 
     @Tool("Analyze a Java class structure to understand methods and fields")
     public String analyzeClass(@P("Path to the Java source file") String path) throws IOException {
-        log.info("Analyzing class structure: {}", path);
+        log.info("Tool Input - analyzeClass: path={}", path);
         Path sourcePath = Paths.get(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 

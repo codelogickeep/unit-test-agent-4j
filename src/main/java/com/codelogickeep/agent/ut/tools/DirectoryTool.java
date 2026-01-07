@@ -18,7 +18,7 @@ public class DirectoryTool implements AgentTool {
 
     @Tool("List files and directories in a given path. Returns names suffixed with '/' if they are directories.")
     public List<String> listFiles(@P("Path to the directory to list") String path) throws IOException {
-        log.info("Listing files in directory: {}", path);
+        log.info("Tool Input - listFiles: path={}", path);
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
             throw new IOException("Directory not found: " + path);
@@ -40,14 +40,14 @@ public class DirectoryTool implements AgentTool {
 
     @Tool("Check if a directory exists.")
     public boolean directoryExists(@P("Path to the directory to check") String path) {
-        log.info("Checking if directory exists: {}", path);
+        log.info("Tool Input - directoryExists: path={}", path);
         Path p = Paths.get(path);
         return Files.exists(p) && Files.isDirectory(p);
     }
 
     @Tool("Create a directory and all non-existent parent directories.")
     public void createDirectory(@P("Path to the directory to create") String path) throws IOException {
-        log.info("Creating directory: {}", path);
+        log.info("Tool Input - createDirectory: path={}", path);
         Path p = Paths.get(path);
         Files.createDirectories(p);
     }

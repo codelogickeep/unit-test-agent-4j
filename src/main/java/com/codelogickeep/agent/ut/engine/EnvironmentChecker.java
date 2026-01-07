@@ -11,12 +11,21 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class EnvironmentChecker {
 
     public static void check(AppConfig config) {
+        check(config, null);
+    }
+
+    public static void check(AppConfig config, String projectRoot) {
         System.out.println("\n>>> Starting Environment Check...\n");
 
         if (config.getLlm() != null) {
@@ -27,21 +36,118 @@ public class EnvironmentChecker {
         if (config.getWorkflow() != null) {
             System.out.println("Max Retries:  " + config.getWorkflow().getMaxRetries());
         }
+        if (projectRoot != null) {
+            System.out.println("Project Root: " + projectRoot);
+        }
         System.out.println();
 
         boolean mvnOk = checkMaven();
         boolean llmOk = checkLlm(config);
         boolean permOk = checkPermissions();
+        boolean projectOk = projectRoot == null || auditProject(config, projectRoot);
 
         System.out.println("\n>>> Environment Check Summary:");
-        System.out.println("Maven: " + (mvnOk ? "OK" : "FAILED"));
-        System.out.println("LLM: " + (llmOk ? "OK" : "FAILED"));
+        System.out.println("Maven:       " + (mvnOk ? "OK" : "FAILED"));
+        System.out.println("LLM:         " + (llmOk ? "OK" : "FAILED"));
         System.out.println("Permissions: " + (permOk ? "OK" : "FAILED"));
+        if (projectRoot != null) {
+            System.out.println("Project Dep: " + (projectOk ? "OK" : "WARNING (Dependency issues found)"));
+        }
 
         if (!mvnOk || !llmOk || !permOk) {
-            System.out.println("\n>>> Please fix the issues above before running the agent.");
+            System.out.println("\n>>> Please fix the CRITICAL issues above before running the agent.");
+        } else if (projectRoot != null && !projectOk) {
+            System.out.println("\n>>> WARNING: Project has missing or outdated recommended dependencies.");
+            System.out.println("    The Agent will attempt to fix pom.xml automatically during execution.");
         } else {
             System.out.println("\n>>> Environment is ready!");
+        }
+    }
+
+    private static boolean auditProject(AppConfig config, String projectRoot) {
+        System.out.print("Auditing Project Dependencies... ");
+        Path pomPath = Paths.get(projectRoot, "pom.xml");
+        if (!Files.exists(pomPath)) {
+            System.out.println("SKIPPED (pom.xml not found)");
+            return true;
+        }
+
+        Map<String, String> required = config.getDependencies();
+        if (required == null || required.isEmpty()) {
+            System.out.println("OK (No version requirements defined)");
+            return true;
+        }
+
+        try {
+            String content = Files.readString(pomPath);
+            List<String> missing = new ArrayList<>();
+            List<String> outdated = new ArrayList<>();
+
+            for (Map.Entry<String, String> entry : required.entrySet()) {
+                String artifactId = entry.getKey();
+                String minVersion = entry.getValue();
+
+                if (!content.contains(artifactId)) {
+                    missing.add(artifactId);
+                } else {
+                    // Try to find the version using regex
+                    String currentVersion = extractVersion(content, artifactId);
+                    if (currentVersion != null && isVersionLower(currentVersion, minVersion)) {
+                        outdated.add(artifactId + " (" + currentVersion + " < " + minVersion + ")");
+                    }
+                }
+            }
+
+            if (missing.isEmpty() && outdated.isEmpty()) {
+                System.out.println("OK");
+                return true;
+            } else {
+                System.out.println("WARNING");
+                if (!missing.isEmpty()) System.out.println("  Missing components: " + String.join(", ", missing));
+                if (!outdated.isEmpty()) System.out.println("  Outdated components: " + String.join(", ", outdated));
+                return false;
+            }
+        } catch (IOException e) {
+            System.out.println("FAILED (Error reading pom.xml)");
+            return false;
+        }
+    }
+
+    private static String extractVersion(String pomContent, String artifactId) {
+        // Look for <artifactId>... followed by <version>...
+        String regex = "<artifactId>" + Pattern.quote(artifactId) + "</artifactId>\\s*(?:<[^>]*>\\s*)*<version>([^<]+)</version>";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(pomContent);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        
+        // Also look for properties like <jacoco.version> if version is a placeholder
+        // This is a simplified check
+        return null;
+    }
+
+    private static boolean isVersionLower(String current, String required) {
+        if (current.startsWith("${") || required.startsWith("${")) return false; // Skip property placeholders
+        
+        String[] v1 = current.split("[\\.\\-]");
+        String[] v2 = required.split("[\\.\\-]");
+        
+        int length = Math.max(v1.length, v2.length);
+        for (int i = 0; i < length; i++) {
+            int n1 = i < v1.length ? tryParseInt(v1[i]) : 0;
+            int n2 = i < v2.length ? tryParseInt(v2[i]) : 0;
+            if (n1 < n2) return true;
+            if (n1 > n2) return false;
+        }
+        return false;
+    }
+
+    private static int tryParseInt(String s) {
+        try {
+            return Integer.parseInt(s.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 

@@ -22,7 +22,7 @@ public class CoverageTool implements AgentTool {
 
     @Tool("Get the test coverage report summary (JaCoCo). Requires tests to be executed first.")
     public String getCoverageReport(@P("Path to the module directory where target/site/jacoco/jacoco.xml is located") String modulePath) throws IOException {
-        log.info("Reading coverage report for module: {}", modulePath);
+        log.info("Tool Input - getCoverageReport: modulePath={}", modulePath);
         // Assume standard Maven structure: target/site/jacoco/jacoco.xml
         Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
         File xmlFile = reportPath.toFile();
