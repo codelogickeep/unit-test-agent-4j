@@ -35,15 +35,15 @@ public class LlmClient {
                 if (!baseUrl.endsWith("/v1beta") && !baseUrl.endsWith("/v1beta/")) {
                     baseUrl = baseUrl.endsWith("/") ? baseUrl + "v1beta" : baseUrl + "/v1beta";
                 }
-            } else {
-                // OpenAI and others usually use /v1
+            } else if (!"openai-zhipu".equals(protocol)) {
+                // OpenAI and others usually use /v1, but openai-zhipu uses custom URL as-is
                 if (!baseUrl.endsWith("/v1") && !baseUrl.endsWith("/v1/")) {
                     baseUrl = baseUrl.endsWith("/") ? baseUrl + "v1" : baseUrl + "/v1";
                 }
             }
         }
 
-        if ("openai".equals(protocol)) {
+        if ("openai".equals(protocol) || "openai-zhipu".equals(protocol)) {
             OpenAiStreamingChatModel.OpenAiStreamingChatModelBuilder builder = OpenAiStreamingChatModel.builder()
                     .apiKey(config.getApiKey())
                     .modelName(config.getModelName())

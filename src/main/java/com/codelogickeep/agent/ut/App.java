@@ -56,6 +56,9 @@ public class App implements Callable<Integer> {
     @Option(names = {"--save"}, description = "Save the overridden configuration (API Key, Base URL, Model) to agent.yml for future runs.")
     private boolean saveConfig;
 
+    @Option(names = {"-i", "--interactive"}, description = "Enable interactive mode: confirm before writing test files.")
+    private boolean interactive;
+
     public static void main(String[] args) {
         if (args.length == 0) {
             System.out.println("Unit Test Agent: An AI assistant for automatically generating JUnit 5 unit tests.");
@@ -97,6 +100,9 @@ public class App implements Callable<Integer> {
         }
         if (maxRetries != null) {
             config.getWorkflow().setMaxRetries(maxRetries);
+        }
+        if (interactive) {
+            config.getWorkflow().setInteractive(true);
         }
 
         // Apply Defaults if still null
@@ -152,6 +158,7 @@ public class App implements Callable<Integer> {
             for (Object tool : tools) {
                 if (tool instanceof FileSystemTool) {
                     ((FileSystemTool) tool).setProjectRoot(projectRoot);
+                    ((FileSystemTool) tool).setInteractive(config.getWorkflow().isInteractive());
                 }
             }
 

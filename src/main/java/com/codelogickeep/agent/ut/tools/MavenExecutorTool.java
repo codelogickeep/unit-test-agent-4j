@@ -149,7 +149,13 @@ public class MavenExecutorTool implements AgentTool {
         }
 
         command.add("test");
-        command.add("-Dtest=" + testClassName);
+        // Quote the test class name to prevent PowerShell from misinterpreting dots
+        String shell = isWindows ? getShell() : null;
+        if (shell != null && (shell.contains("powershell") || shell.contains("pwsh"))) {
+            command.add("\"-Dtest=" + testClassName + "\"");
+        } else {
+            command.add("-Dtest=" + testClassName);
+        }
         command.add("-B");
 
         return executeCommand(command);

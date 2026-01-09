@@ -6,7 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.ArrayList;
+import java.util.Scanner;
 import java.util.regex.Pattern;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -16,11 +16,20 @@ import org.slf4j.LoggerFactory;
 public class FileSystemTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(FileSystemTool.class);
     private Path projectRoot = Paths.get(".").toAbsolutePath().normalize();
+    private boolean interactive = false;
+    private static final Scanner scanner = new Scanner(System.in);
 
     public void setProjectRoot(String rootPath) {
         if (rootPath != null) {
             this.projectRoot = Paths.get(rootPath).toAbsolutePath().normalize();
             log.info("FileSystemTool project root locked to: {}", projectRoot);
+        }
+    }
+
+    public void setInteractive(boolean interactive) {
+        this.interactive = interactive;
+        if (interactive) {
+            log.info("FileSystemTool interactive mode enabled");
         }
     }
 
@@ -39,12 +48,69 @@ public class FileSystemTool implements AgentTool {
         return p;
     }
 
+    private boolean confirmWrite(String path, String content, String operation) {
+        if (!interactive) {
+            return true;
+        }
+
+        System.out.println();
+        System.out.println("═".repeat(60));
+        System.out.println("📝 INTERACTIVE CONFIRMATION REQUIRED");
+        System.out.println("═".repeat(60));
+        System.out.println("Operation: " + operation);
+        System.out.println("File: " + path);
+        System.out.println("─".repeat(60));
+
+        // Show preview (first 30 lines or 2000 chars)
+        String preview = content;
+        String[] lines = content.split("\n");
+        if (lines.length > 30) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 30; i++) {
+                sb.append(lines[i]).append("\n");
+            }
+            sb.append("... (").append(lines.length - 30).append(" more lines)");
+            preview = sb.toString();
+        } else if (content.length() > 2000) {
+            preview = content.substring(0, 2000) + "\n... (truncated)";
+        }
+
+        System.out.println("Content Preview:");
+        System.out.println("─".repeat(60));
+        System.out.println(preview);
+        System.out.println("─".repeat(60));
+        System.out.println();
+        System.out.print("Proceed with this write? [Y/n/v(iew full)]: ");
+        System.out.flush();
+
+        String input = scanner.nextLine().trim().toLowerCase();
+
+        if ("v".equals(input)) {
+            System.out.println("\n=== FULL CONTENT ===\n");
+            System.out.println(content);
+            System.out.println("\n=== END OF CONTENT ===\n");
+            System.out.print("Proceed with this write? [Y/n]: ");
+            System.out.flush();
+            input = scanner.nextLine().trim().toLowerCase();
+        }
+
+        boolean confirmed = input.isEmpty() || "y".equals(input) || "yes".equals(input);
+        if (confirmed) {
+            System.out.println("✓ Confirmed. Writing file...");
+        } else {
+            System.out.println("✗ Cancelled by user.");
+        }
+        System.out.println();
+
+        return confirmed;
+    }
+
     @Tool("Replace the first occurrence of a specific string with a new string in a file. Use this for precise code fixes in Java or POM files.")
     public String searchReplace(@P("Path to the file (relative to project root)") String path,
                               @P("The exact string to be replaced") String oldString,
                               @P("The new string to replace with") String newString) throws IOException {
-        log.info("Tool Input - searchReplace: path={}, oldString length={}, newString length={}", path, 
-                oldString != null ? oldString.length() : "null", 
+        log.info("Tool Input - searchReplace: path={}, oldString length={}, newString length={}", path,
+                oldString != null ? oldString.length() : "null",
                 newString != null ? newString.length() : "null");
         try {
             Path p = resolveSafePath(path);
@@ -56,6 +122,31 @@ public class FileSystemTool implements AgentTool {
                 return "ERROR: oldString NOT FOUND. Please use 'readFile' to get the exact content first.";
             }
             String newContent = content.replaceFirst(Pattern.quote(oldString), newString);
+
+            if (interactive) {
+                // Show diff-like preview
+                System.out.println();
+                System.out.println("═".repeat(60));
+                System.out.println("📝 SEARCH & REPLACE CONFIRMATION");
+                System.out.println("═".repeat(60));
+                System.out.println("File: " + path);
+                System.out.println("─".repeat(60));
+                System.out.println("OLD (to be replaced):");
+                System.out.println(oldString.length() > 500 ? oldString.substring(0, 500) + "..." : oldString);
+                System.out.println("─".repeat(60));
+                System.out.println("NEW (replacement):");
+                System.out.println(newString.length() > 500 ? newString.substring(0, 500) + "..." : newString);
+                System.out.println("─".repeat(60));
+                System.out.print("Proceed with this replacement? [Y/n]: ");
+                System.out.flush();
+
+                String input = scanner.nextLine().trim().toLowerCase();
+                if (!input.isEmpty() && !"y".equals(input) && !"yes".equals(input)) {
+                    return "CANCELLED: User declined the replacement.";
+                }
+                System.out.println("✓ Confirmed. Applying replacement...");
+            }
+
             Files.writeString(p, newContent, StandardCharsets.UTF_8);
             return "SUCCESS: File updated: " + path;
         } catch (Exception e) {
@@ -89,28 +180,34 @@ public class FileSystemTool implements AgentTool {
     }
 
     @Tool("Write content to a file. Useful for creating new test classes.")
-    public void writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
+    public String writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
         log.info("Tool Input - writeFile: path={}, content length={}", path, content != null ? content.length() : "null");
         try {
             Path p = resolveSafePath(path);
+
+            // Interactive confirmation
+            if (!confirmWrite(path, content, Files.exists(p) ? "OVERWRITE FILE" : "CREATE NEW FILE")) {
+                return "CANCELLED: User declined to write file: " + path;
+            }
+
             // Ensure parent directories exist
             if (p.getParent() != null) {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, content, StandardCharsets.UTF_8);
+            return "SUCCESS: File written: " + path;
         } catch (Exception e) {
             throw new IOException(e.getMessage());
         }
     }
 
     @Tool("Replace content in a file starting from a specific line number.")
-    public void writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
+    public String writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
         log.info("Tool Input - writeFileFromLine: path={}, startLine={}, content length={}", path, startLine, content != null ? content.length() : "null");
         try {
             Path p = resolveSafePath(path);
             if (!Files.exists(p)) {
-                writeFile(path, content);
-                return;
+                return writeFile(path, content);
             }
 
             List<String> lines = Files.readAllLines(p, StandardCharsets.UTF_8);
@@ -121,15 +218,21 @@ public class FileSystemTool implements AgentTool {
             // Pad if needed
             while (lines.size() < startLine - 1) {
                 finalContent.append(System.lineSeparator());
-                lines.add(""); 
+                lines.add("");
             }
 
             finalContent.append(content);
+
+            // Interactive confirmation
+            if (!confirmWrite(path, finalContent.toString(), "MODIFY FILE FROM LINE " + startLine)) {
+                return "CANCELLED: User declined to modify file: " + path;
+            }
 
             if (p.getParent() != null) {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, finalContent.toString(), StandardCharsets.UTF_8);
+            return "SUCCESS: File modified from line " + startLine + ": " + path;
         } catch (Exception e) {
             throw new IOException(e.getMessage());
         }

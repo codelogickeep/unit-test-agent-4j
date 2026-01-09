@@ -35,6 +35,8 @@ public class AppConfig {
     @Data
     public static class WorkflowConfig {
         private int maxRetries;
+        private int coverageThreshold = 80; // 默认 80% 覆盖率阈值
+        private boolean interactive = false; // 交互式确认模式
     }
     
     @Data
