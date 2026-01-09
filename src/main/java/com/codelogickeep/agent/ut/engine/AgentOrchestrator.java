@@ -32,6 +32,10 @@ public class AgentOrchestrator {
     }
 
     public void run(String targetFile) {
+        run(targetFile, null);
+    }
+
+    public void run(String targetFile, String taskContext) {
         log.info("Starting Agent orchestration for target: {}", targetFile);
 
         // Load System Prompt dynamically
@@ -60,7 +64,10 @@ public class AgentOrchestrator {
             }
 
             try {
-                TokenStream tokenStream = assistant.generateTest(targetFile);
+                String userMessage = taskContext != null
+                        ? taskContext + "\n\nTarget file: " + targetFile
+                        : targetFile;
+                TokenStream tokenStream = assistant.generateTest(userMessage);
                 StringBuilder contentBuilder = new StringBuilder();
                 CompletableFuture<String> future = new CompletableFuture<>();
 

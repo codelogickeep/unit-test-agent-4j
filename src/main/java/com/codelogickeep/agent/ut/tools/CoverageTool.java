@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.codelogickeep.agent.ut.model.UncoveredMethod;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.slf4j.Logger;
@@ -286,5 +287,138 @@ public class CoverageTool implements AgentTool {
             count++;
         }
         return count == 0 ? "()" : "(" + count + " params)";
+    }
+
+    @Tool("Get compact uncovered methods list for LLM test generation (minimal token usage)")
+    public String getUncoveredMethodsCompact(
+            @P("Path to the module directory") String modulePath,
+            @P("Fully qualified class name") String className,
+            @P("Coverage threshold percentage") int threshold) throws IOException {
+
+        log.info("Tool Input - getUncoveredMethodsCompact: modulePath={}, className={}, threshold={}", modulePath, className, threshold);
+        Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
+        File xmlFile = reportPath.toFile();
+
+        if (!xmlFile.exists()) {
+            return "ERROR: No coverage report. Run tests first.";
+        }
+
+        try {
+            Document doc = parseXml(xmlFile);
+            String packageName = className.contains(".") ? className.substring(0, className.lastIndexOf('.')) : "";
+            String simpleClassName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            Element targetClass = findClass(doc, packageName, simpleClassName);
+            if (targetClass == null) {
+                return "ERROR: Class not found: " + className;
+            }
+
+            double lineCoverage = calculateCoverage(targetClass, "LINE");
+            if (lineCoverage >= threshold) {
+                return "PASS: " + className + " coverage " + String.format("%.0f%%", lineCoverage) + " >= " + threshold + "%";
+            }
+
+            StringBuilder result = new StringBuilder();
+            result.append("Class: ").append(className).append("\n");
+            result.append("Coverage: ").append(String.format("%.0f%%", lineCoverage)).append(" (need ").append(threshold).append("%)\n");
+            result.append("Uncovered:\n");
+
+            NodeList methods = targetClass.getElementsByTagName("method");
+            int uncoveredCount = 0;
+            for (int i = 0; i < methods.getLength(); i++) {
+                Element method = (Element) methods.item(i);
+                if (method.getParentNode() != targetClass) continue;
+
+                String methodName = method.getAttribute("name");
+                if ("<clinit>".equals(methodName)) continue;
+
+                double methodCov = calculateCoverage(method, "LINE");
+                if (methodCov < threshold) {
+                    String displayName = "<init>".equals(methodName) ? "constructor" : methodName;
+                    String desc = method.getAttribute("desc");
+                    result.append("- ").append(displayName).append(parseDescriptor(desc))
+                          .append(" : ").append(String.format("%.0f%%", methodCov)).append("\n");
+                    uncoveredCount++;
+                }
+            }
+
+            if (uncoveredCount == 0) {
+                return "PASS: All methods meet threshold";
+            }
+
+            return result.toString();
+        } catch (Exception e) {
+            throw new IOException("Failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get uncovered methods as structured list (for BatchAnalyzer)
+     */
+    public List<UncoveredMethod> getUncoveredMethodsList(String modulePath, String className, int threshold) throws IOException {
+        List<UncoveredMethod> result = new ArrayList<>();
+        Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
+        File xmlFile = reportPath.toFile();
+
+        if (!xmlFile.exists()) {
+            return result;
+        }
+
+        try {
+            Document doc = parseXml(xmlFile);
+            String packageName = className.contains(".") ? className.substring(0, className.lastIndexOf('.')) : "";
+            String simpleClassName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            Element targetClass = findClass(doc, packageName, simpleClassName);
+            if (targetClass == null) {
+                return result;
+            }
+
+            NodeList methods = targetClass.getElementsByTagName("method");
+            for (int i = 0; i < methods.getLength(); i++) {
+                Element method = (Element) methods.item(i);
+                if (method.getParentNode() != targetClass) continue;
+
+                String methodName = method.getAttribute("name");
+                if ("<clinit>".equals(methodName)) continue;
+
+                double lineCov = calculateCoverage(method, "LINE");
+                double branchCov = calculateCoverage(method, "BRANCH");
+
+                if (lineCov < threshold) {
+                    String displayName = "<init>".equals(methodName) ? "constructor" : methodName;
+                    String desc = method.getAttribute("desc");
+
+                    result.add(UncoveredMethod.builder()
+                            .methodName(displayName)
+                            .signature(displayName + parseDescriptor(desc))
+                            .lineCoverage(lineCov)
+                            .branchCoverage(branchCov)
+                            .build());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to get uncovered methods list", e);
+        }
+
+        return result;
+    }
+
+    private Element findClass(Document doc, String packageName, String simpleClassName) {
+        NodeList packages = doc.getElementsByTagName("package");
+        for (int i = 0; i < packages.getLength(); i++) {
+            Element pkg = (Element) packages.item(i);
+            if (!pkg.getAttribute("name").replace('/', '.').equals(packageName)) continue;
+
+            NodeList classes = pkg.getElementsByTagName("class");
+            for (int j = 0; j < classes.getLength(); j++) {
+                Element cls = (Element) classes.item(j);
+                String clsName = cls.getAttribute("name");
+                if (clsName.endsWith("/" + simpleClassName) || clsName.equals(simpleClassName)) {
+                    return cls;
+                }
+            }
+        }
+        return null;
     }
 }

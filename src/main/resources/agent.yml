@@ -1,17 +1,31 @@
+# =============================================================================
+# Unit Test Agent 4j - Configuration File
+# =============================================================================
+
 # LLM Settings
 llm:
-  protocol: "openai" # openai | anthropic | gemini
-  apiKey: "${env:UT_AGENT_API_KEY}"
-  baseUrl: "${env:UT_AGENT_BASE_URL}"
-  modelName: "${env:UT_AGENT_MODEL_NAME}"
-  temperature: 0.0
-  timeout: 120
+  protocol: "openai"                      # openai | openai-zhipu | anthropic | gemini
+  apiKey: "${env:UT_AGENT_API_KEY}"       # API Key (supports env var)
+  baseUrl: "${env:UT_AGENT_BASE_URL}"     # Base URL (auto handles /v1 suffix)
+  modelName: "${env:UT_AGENT_MODEL_NAME}" # Model name
+  temperature: 0.0                        # 0.0 (precise) ~ 1.0 (creative)
+  timeout: 120                            # Request timeout in seconds
+  customHeaders: {}                       # Custom HTTP headers (optional)
+    # X-Custom-Header: "value"
 
 # Workflow Settings
 workflow:
-  maxRetries: 5
+  maxRetries: 5                           # Max retry attempts on failure
+  coverageThreshold: 80                   # Coverage threshold (%)
+  interactive: false                      # Interactive confirmation mode
 
-# Recommended Dependencies & Minimum Versions
+# Batch Mode Settings (for --project)
+batch:
+  excludePatterns: ""                     # Glob patterns to exclude (comma-separated)
+    # Example: "**/dto/**,**/vo/**,**/domain/**"
+  dryRun: false                           # Analyze only, no generation
+
+# Recommended Dependencies & Minimum Versions (for env check)
 dependencies:
   junit-jupiter: "5.10.1"
   mockito-core: "5.8.0"
@@ -23,11 +37,18 @@ dependencies:
 
 # Prompts Configuration
 prompts:
-  system: "prompts/system-prompt.st"
+  system: "prompts/system-prompt.st"      # System prompt template path
 
-# MCP Configuration (Future Placeholder)
+# MCP Configuration (Model Context Protocol)
 mcp:
-  servers: []
+  servers: []                             # MCP server configurations
+    # - name: "server-name"
+    #   url: "http://localhost:8080"
 
-# Skills Configuration (Future Placeholder)
-skills: []
+# Skills Configuration
+skills: []                                # Custom skills
+  # - name: "custom-skill"
+  #   description: "Skill description"
+  #   type: "prompt"
+  #   params:
+  #     template: "skill-template.st"

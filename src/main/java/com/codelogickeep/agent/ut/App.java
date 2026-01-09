@@ -11,6 +11,9 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import com.codelogickeep.agent.ut.engine.BatchAnalyzer;
+import com.codelogickeep.agent.ut.model.TestTask;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,6 +61,18 @@ public class App implements Callable<Integer> {
 
     @Option(names = {"-i", "--interactive"}, description = "Enable interactive mode: confirm before writing test files.")
     private boolean interactive;
+
+    @Option(names = {"-p", "--project"}, description = "Project directory for batch mode: scan and generate tests for all uncovered classes.")
+    private String projectDir;
+
+    @Option(names = {"--exclude"}, description = "Exclude patterns for batch mode (comma-separated globs, e.g., '**/dto/*.java,**/vo/*.java').")
+    private String excludePatterns;
+
+    @Option(names = {"--dry-run"}, description = "Batch mode: analyze only, print report without generating tests.")
+    private boolean dryRun;
+
+    @Option(names = {"--threshold"}, description = "Coverage threshold (0-100). Methods below this threshold will be targeted. Default: 80.")
+    private Integer coverageThreshold;
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -169,13 +184,18 @@ public class App implements Callable<Integer> {
             );
 
             // 5. Run Agent
-            if (targetFile == null) {
-                System.err.println("Error: Missing required option: --target=<targetFile>");
+            if (projectDir != null) {
+                // Batch mode
+                return runBatchMode(config, llmClient, tools, projectRoot);
+            } else if (targetFile != null) {
+                // Single file mode
+                System.out.println(">>> Agent started for target: " + targetFile);
+                orchestrator.run(targetFile);
+                System.out.println(">>> Agent finished.");
+            } else {
+                System.err.println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
                 return 1;
             }
-            System.out.println(">>> Agent started for target: " + targetFile);
-            orchestrator.run(targetFile);
-            System.out.println(">>> Agent finished.");
             
             return 0;
         } catch (IllegalArgumentException e) {
@@ -276,6 +296,55 @@ public class App implements Callable<Integer> {
         }
         
         return value;
+    }
+
+    private int runBatchMode(AppConfig config, LlmClient llmClient, List<Object> tools, String projectRoot) {
+        System.out.println(">>> Batch mode started for project: " + projectRoot);
+
+        int threshold = coverageThreshold != null ? coverageThreshold : 80;
+        BatchAnalyzer analyzer = new BatchAnalyzer(projectRoot, threshold);
+
+        try {
+            List<TestTask> tasks = analyzer.analyze(excludePatterns);
+
+            if (tasks.isEmpty()) {
+                System.out.println(">>> No classes need test generation.");
+                return 0;
+            }
+
+            if (dryRun) {
+                analyzer.printReport(tasks);
+                return 0;
+            }
+
+            System.out.println(">>> Found " + tasks.size() + " classes needing tests:");
+            for (TestTask t : tasks) {
+                System.out.println("    - " + t.getSourceFilePath() + " (" + t.getUncoveredMethods().size() + " uncovered methods)");
+            }
+
+            // Process each class
+            int processed = 0;
+            for (TestTask task : tasks) {
+                System.out.println("\n>>> Processing [" + (++processed) + "/" + tasks.size() + "]: " + task.getSourceFilePath());
+                try {
+                    AgentOrchestrator orchestrator = new AgentOrchestrator(
+                            config, llmClient.createStreamingModel(), tools
+                    );
+                    // Pass task context to orchestrator
+                    String taskPrompt = analyzer.buildTaskPrompt(task);
+                    orchestrator.run(task.getSourceFilePath(), taskPrompt);
+                } catch (Exception e) {
+                    System.err.println("    Error: " + e.getMessage());
+                }
+            }
+
+            System.out.println("\n>>> Batch mode completed. Processed " + processed + " classes.");
+            return 0;
+        } catch (Exception e) {
+            System.err.println("Error during batch analysis: " + e.getMessage());
+            e.printStackTrace();
+            return 1;
+        }
     }
 
     @Command(name = "config", 

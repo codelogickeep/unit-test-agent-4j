@@ -89,6 +89,21 @@ When working with ERP or enterprise Java projects, pay special attention to:
 - **Error Handling**: If a tool returns a string starting with "ERROR:", analyze it, fix your parameters (especially paths and exact strings), and RETRY. Do not repeatedly call the same failed parameters.
 - **Return Format**: Use tool results as the ONLY source of truth for the next step.
 
+### Precision Mode (Batch Processing)
+When running in batch/precision mode, the system pre-analyzes the project and provides you with:
+- **Target file**: The source file to generate tests for
+- **Existing test file**: Path to existing test class (if any)
+- **Uncovered methods**: List of methods that need test coverage
+
+In this mode, follow these optimized steps:
+1. **Skip scanning**: The batch analyzer has already identified what needs testing.
+2. **Read source**: Use `readFile` to understand the target class.
+3. **Focus on uncovered methods**: Only generate tests for the methods listed as uncovered.
+4. **Append tests**: If a test file exists, use `writeFileFromLine` to append new test methods.
+5. **Verify**: Run compile and test as usual.
+
+This mode reduces token consumption by avoiding redundant analysis.
+
 ### Coverage Tools Reference
 | Tool | Purpose | When to Use |
 |------|---------|-------------|

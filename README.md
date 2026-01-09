@@ -54,9 +54,32 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
 
 #### 2. 生成测试
 
+**单文件模式**：为指定文件生成测试
 ```bash
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --target src/main/java/com/example/MyService.java
+```
+
+**批量模式**：扫描整个工程，自动识别需要测试的类
+```bash
+# 扫描整个工程
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
+  --project E:\MyProject
+
+# 带排除规则（排除 DTO、VO 等）
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
+  --project E:\MyProject \
+  --exclude "**/dto/**,**/vo/**,**/domain/**"
+
+# 设置覆盖率阈值
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
+  --project E:\MyProject \
+  --threshold 70
+
+# 仅分析不生成（dry-run 模式）
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
+  --project E:\MyProject \
+  --dry-run
 ```
 
 #### 3. 命令行参数覆盖
@@ -105,12 +128,18 @@ llm:
   modelName: "${env:UT_AGENT_MODEL_NAME}"
   temperature: 0.0 # 推荐值: 0.0 (精确) 或 0.1 (稍带创造性)
   timeout: 120 # 超时时间 (秒)
+  customHeaders: {} # 自定义 HTTP 头
 
 # 工作流设置
 workflow:
   maxRetries: 3 # 任务失败后的最大重试次数
   coverageThreshold: 80 # 覆盖率阈值 (%)，未达标时自动补充测试
   interactive: false # 交互式确认模式，写入文件前需用户确认
+
+# 批量模式设置
+batch:
+  excludePatterns: "" # 排除规则 (glob 模式，逗号分隔)
+  dryRun: false # 仅分析不生成
 
 # 推荐依赖及最低版本 (环境自检使用)
 dependencies:
@@ -119,7 +148,39 @@ dependencies:
   mockito-junit-jupiter: "5.8.0"
   mockito-inline: "5.8.0"
   jacoco-maven-plugin: "0.8.11"
+
+# Prompts 配置
+prompts:
+  system: "prompts/system-prompt.st"
+
+# MCP 配置
+mcp:
+  servers: []
+
+# Skills 配置
+skills: []
 ```
+
+### 配置参数说明
+
+| 分类 | 参数 | 说明 |
+|------|------|------|
+| **llm** | protocol | 协议类型 (openai/openai-zhipu/anthropic/gemini) |
+| | apiKey | API 密钥，支持 `${env:VAR}` 环境变量 |
+| | baseUrl | 基础 URL，自动处理 /v1 后缀 |
+| | modelName | 模型名称 |
+| | temperature | 温度 (0.0 精确 ~ 1.0 创造性) |
+| | timeout | 请求超时时间 (秒) |
+| | customHeaders | 自定义 HTTP 请求头 |
+| **workflow** | maxRetries | 失败后最大重试次数 |
+| | coverageThreshold | 覆盖率阈值 (%)，未达标自动补充测试 |
+| | interactive | 交互式确认模式 |
+| **batch** | excludePatterns | 批量模式排除规则 (glob 模式) |
+| | dryRun | 仅分析不生成测试 |
+| **dependencies** | * | 推荐依赖版本，用于环境检查 |
+| **prompts** | system | 系统提示词模板路径 |
+| **mcp** | servers | MCP 服务器配置列表 |
+| **skills** | * | 自定义技能配置 |
 
 ## 开发架构
 
@@ -158,6 +219,55 @@ graph TD
 ## 平台兼容性
 - **Windows**: 优先探测并使用 **PowerShell 7 (pwsh)**，自动处理 Windows 路径编码。
 - **Linux/macOS**: 使用标准 `sh` 和 `mvn` 指令。
+
+## 批量模式（精准单测生成）
+
+批量模式通过预分析减少 LLM 调用，只为未覆盖/低覆盖的方法生成测试。
+
+### 工作流程
+
+1. **扫描工程**：识别 `src/main/java` 下的核心代码类
+2. **排除非核心类**：自动排除 DTO、VO、Entity、Enum 等数据类
+3. **分析覆盖率**：读取 JaCoCo 报告，识别未覆盖方法
+4. **精准生成**：只为需要测试的方法调用 LLM
+
+### 命令行参数
+
+| 参数 | 简写 | 说明 |
+|------|------|------|
+| `--project` | `-p` | 工程根目录路径 |
+| `--exclude` | `-e` | 排除规则（glob 模式，逗号分隔） |
+| `--threshold` | | 覆盖率阈值（默认 80%） |
+| `--dry-run` | | 仅分析不生成，输出报告 |
+
+### 内置排除规则
+
+批量模式默认排除以下类型：
+- `**/dto/**`, `**/vo/**`, `**/domain/**`
+- `**/*DTO.java`, `**/*VO.java`, `**/*Entity.java`
+- `**/*Enum.java`, `**/*Criteria.java`
+- `**/dao/**/*DAO.java`, `**/repo/**/*Repo.java`
+
+### Dry-Run 输出示例
+
+```
+=== Batch Analysis Report ===
+
+Project: E:\MyProject
+Coverage Threshold: 80%
+Classes needing tests: 3
+
+────────────────────────────────────────────────────────────
+Class: com.example.service.OrderService
+Source: src/main/java/com/example/service/OrderService.java
+Test: src/test/java/com/example/service/OrderServiceTest.java
+Uncovered methods:
+  - calculateDiscount(BigDecimal, int) : 30%
+  - validateOrder(Order) : 0%
+────────────────────────────────────────────────────────────
+
+Total: 3 classes, 8 methods need tests
+```
 
 ## 覆盖率驱动测试
 
