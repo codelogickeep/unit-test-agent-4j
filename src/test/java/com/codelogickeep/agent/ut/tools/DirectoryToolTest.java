@@ -1,5 +1,6 @@
 package com.codelogickeep.agent.ut.tools;
 
+import com.codelogickeep.agent.ut.exception.AgentToolException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -62,9 +63,9 @@ class DirectoryToolTest {
     }
 
     @Test
-    @DisplayName("listFiles should throw IOException for non-existing path")
+    @DisplayName("listFiles should throw AgentToolException for non-existing path")
     void listFiles_shouldThrowForNonExistingPath() {
-        IOException exception = assertThrows(IOException.class, 
+        AgentToolException exception = assertThrows(AgentToolException.class, 
             () -> tool.listFiles(tempDir.resolve("nonexistent").toString()));
         assertTrue(exception.getMessage().contains("not found"));
     }
@@ -75,7 +76,7 @@ class DirectoryToolTest {
         Path file = tempDir.resolve("file.txt");
         Files.writeString(file, "content");
 
-        IOException exception = assertThrows(IOException.class, 
+        AgentToolException exception = assertThrows(AgentToolException.class, 
             () -> tool.listFiles(file.toString()));
         assertTrue(exception.getMessage().contains("not a directory"));
     }

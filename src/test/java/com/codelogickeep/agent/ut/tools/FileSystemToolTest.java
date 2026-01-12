@@ -1,5 +1,6 @@
 package com.codelogickeep.agent.ut.tools;
 
+import com.codelogickeep.agent.ut.exception.AgentToolException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -54,7 +55,7 @@ class FileSystemToolTest {
         Path outsideFile = tempDir.getParent().resolve("outside.txt");
         
         // Attempt to access using path traversal
-        assertThrows(IOException.class, () -> tool.readFile("../outside.txt"));
+        assertThrows(AgentToolException.class, () -> tool.readFile("../outside.txt"));
     }
 
     @Test
@@ -122,9 +123,9 @@ class FileSystemToolTest {
     }
 
     @Test
-    @DisplayName("readFile should throw IOException for non-existing file")
+    @DisplayName("readFile should throw AgentToolException for non-existing file")
     void readFile_shouldThrowForNonExistingFile() {
-        assertThrows(IOException.class, () -> tool.readFile("nonexistent.txt"));
+        assertThrows(AgentToolException.class, () -> tool.readFile("nonexistent.txt"));
     }
 
     @Test

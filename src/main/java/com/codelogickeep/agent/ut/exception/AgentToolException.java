@@ -31,13 +31,23 @@ public class AgentToolException extends RuntimeException {
     }
 
     /**
-     * Constructor with error code, message, context, and cause.
+     * Constructor with error code, message, context, and custom suggestion.
      */
-    public AgentToolException(ErrorCode errorCode, String message, String context, Throwable cause) {
+    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion) {
+        super(message);
+        this.errorCode = errorCode;
+        this.context = context;
+        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
+    }
+
+    /**
+     * Constructor with error code, message, context, custom suggestion, and cause.
+     */
+    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion, Throwable cause) {
         super(message, cause);
         this.errorCode = errorCode;
         this.context = context;
-        this.suggestion = errorCode.getSuggestion();
+        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
     }
 
     /**
