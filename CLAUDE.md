@@ -10,6 +10,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Unit Test Agent 4j is an AI-powered Java tool that automatically generates JUnit 5 + Mockito unit tests for legacy systems. It uses LangChain4j to integrate with multiple LLM providers (OpenAI, Anthropic, Gemini) and includes self-healing capabilities.
 
+**版本**: 0.8.0 (Phase 1-5 已完成)
+
+### 核心特性
+
+| 特性类别 | 具体能力 |
+|---------|---------|
+| **多模型支持** | OpenAI, Anthropic (Claude), Gemini, OpenAI兼容代理 |
+| **智能环境审计** | 自动检测项目依赖版本兼容性 (JUnit 5, Mockito, JaCoCo) |
+| **自修复机制** | 自动编译运行测试，基于 Surefire 报告分类修复 |
+| **项目规范学习** | StyleAnalyzer 提取现有测试风格，RAG 检索文档模板 |
+| **Git 增量检测** | 支持未提交/暂存区/任意 Ref 比较的增量分析 |
+| **测试质量评估** | PITest 变异测试 + 边界值分析 + 覆盖率反馈循环 |
+| **LSP 语法检查** | 可选 Eclipse JDT Language Server 语义分析 |
+| **预编译验证** | JavaParser 快速语法检查 (~10ms) |
+
 ## Build & Run Commands
 
 ```bash
@@ -31,34 +46,74 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --target path/to/Class
 # Run in batch mode (scan entire project)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --project /path/to/project --exclude "**/dto/**"
 
+# Run in incremental mode (Git uncommitted changes)
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --project /path/to/project --incremental
+
+# Run in incremental mode (compare refs)
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --project /path/to/project \
+#   --incremental --incremental-mode COMPARE_REFS --base-ref main --target-ref HEAD
+
 # Configure LLM settings (saved to agent.yml)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config --protocol openai --api-key "sk-..." --model "gpt-4"
 
 # Check environment (Maven, dependencies, permissions)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --check-env
+
+# Interactive mode (confirm before file write)
+java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --target path/to/Class.java --interactive
 ```
 
 ## Architecture
 
 The project follows an **Agent-Tool architecture**:
 
-- **Entry Point** (`App.java`): Picocli-based CLI with `--target` (single file) and `--project` (batch mode) options. Contains nested `ConfigCommand` for persistent configuration.
+- **Entry Point** (`App.java`): Picocli-based CLI with `--target` (single file), `--project` (batch mode), and `--incremental` (Git incremental mode) options. Contains nested `ConfigCommand` for persistent configuration.
 
 - **Agent Layer** (`engine/`): Handles reasoning, orchestration, and LLM interaction via LangChain4j
   - `AgentOrchestrator`: Main workflow with retry loop and exponential backoff
+  - `RetryExecutor`: 重试执行器，独立处理指数退避逻辑
+  - `StreamingResponseHandler`: 实时流式响应处理器
+  - `RepairTracker`: 修复轨迹记录，防止死循环
+  - `DynamicPromptBuilder`: 动态 Prompt 组装器，根据项目规范调整系统提示
   - `LlmClient`: Factory for creating streaming chat models (supports openai, openai-zhipu, anthropic, gemini)
   - `EnvironmentChecker`: Validates project dependencies and versions
   - `BatchAnalyzer`: Pre-analyzes projects for coverage-driven testing
+  - `IncrementalAnalyzer`: Git 增量分析器，整合 Git 差异与测试任务生成
+
+- **Exception Layer** (`exception/`): 统一异常处理
+  - `AgentToolException`: 包含 ErrorCode + Context 的统一异常类
+  - 支持 Builder 模式，提供 toAgentMessage() 生成友好错误提示
 
 - **Infrastructure/Tool Layer** (`tools/`): Executable tools that the Agent calls
   - All tools implement `AgentTool` marker interface (required for auto-discovery via reflection)
-  - `CodeAnalyzerTool`: AST parsing via JavaParser
-  - `CoverageTool`: JaCoCo XML report parsing
+
+  **文件操作**:
   - `FileSystemTool`: File I/O with project root protection and interactive confirmation mode
+  - `DirectoryTool`: 目录创建操作
+
+  **代码分析**:
+  - `CodeAnalyzerTool`: AST parsing via JavaParser
+  - `SyntaxCheckerTool`: JavaParser 快速语法检查 (~10ms)
+  - `LspSyntaxCheckerTool`: Eclipse JDT Language Server 语义分析 (可选)
+  - `StyleAnalyzerTool`: 代码风格自动提取 (Mock 偏好、断言风格、命名惯例)
+
+  **构建与测试**:
   - `MavenExecutorTool`: Runs `mvn` commands (supports PowerShell 7 on Windows)
-  - `KnowledgeBaseTool`: RAG-style search of existing test patterns
-  - `ProjectScannerTool`: Discovers Java source files
+  - `TestReportTool`: Surefire 报告解析，区分错误类型 (编译/断言/超时/依赖)
+  - `CoverageTool`: JaCoCo XML report parsing
+  - `MutationTestTool`: PITest 执行与变异分数报告解析
+
+  **版本控制**:
+  - `GitDiffTool`: 灵活的 Git 差异分析工具 (支持未提交/暂存区/任意 Ref 比较)
+
+  **项目扫描**:
+  - `ProjectScannerTool`: Discovers Java source files with exclusion patterns
   - `TestDiscoveryTool`: Finds existing test files
+
+  **知识库与反馈**:
+  - `KnowledgeBaseTool`: RAG-style search of existing test patterns and Markdown docs
+  - `CoverageFeedbackEngine`: 多轮覆盖率提升引擎
+  - `BoundaryAnalyzerTool`: AST 边界条件分析 (if/switch/for/while/null)
 
 ## Key Design Patterns
 
@@ -68,9 +123,35 @@ The project follows an **Agent-Tool architecture**:
 
 3. **Project Root Protection**: `FileSystemTool` enforces that all file operations are relative to the detected project root (directory containing `pom.xml`). This prevents path traversal issues.
 
-4. **Self-Healing Loop**: `AgentOrchestrator` wraps LLM calls in a retry loop with exponential backoff (2^attempt * 1000ms). Failed generations are automatically re-attempted up to `maxRetries`.
+4. **Retry-Streaming-Tracking 三分离架构**: AgentOrchestrator 重构后职责更清晰
+   - `RetryExecutor`: 独立的指数退避重试逻辑 (2^attempt * 1000ms)
+   - `StreamingResponseHandler`: 实时输出 LLM 响应，提升用户体验
+   - `RepairTracker`: 跟踪修复历史，防止无效循环
 
-5. **Coverage-Driven Testing**: Batch mode uses JaCoCo reports to identify uncovered methods, then generates tests only for what's needed rather than re-analyzing everything.
+5. **统一异常处理**: `AgentToolException` 提供结构化错误信息
+   - `ErrorCode` 枚举: FILE_NOT_FOUND, PARSE_ERROR, EXTERNAL_TOOL_ERROR 等
+   - Builder 模式构建异常
+   - `toAgentMessage()` 生成面向 LLM 的友好提示
+
+6. **自修复增强**: 从简单重试进化为有目的的修复
+   - `TestReportTool` 解析 Surefire XML，区分错误类型
+   - 编译错: 检查导包、泛型、Mock 类型
+   - 断言失败: 分析预期值与实际值差异
+   - 环境/依赖错: 建议或修改 pom.xml
+
+7. **动态 Prompt 组装**: `DynamicPromptBuilder` 根据项目规范调整系统提示
+   - 注入项目的测试风格 (断言风格、命名规范)
+   - 添加边界值测试建议
+   - 结合变异测试结果指导增强
+
+8. **增量分析模式**: `IncrementalAnalyzer` 整合 Git 差异
+   - 支持三种模式: UNCOMMITTED / STAGED_ONLY / COMPARE_REFS
+   - 自动识别变更文件，生成针对性测试任务
+
+9. **质量反馈循环**: `CoverageFeedbackEngine` 多轮迭代提升
+   - 结合边界分析和变异测试结果
+   - 智能决策: 修改现有测试 vs 新增测试 vs 边界值增强
+   - 防止无效循环的迭代历史跟踪
 
 ## Configuration
 
@@ -82,6 +163,36 @@ Default configuration is in `src/main/resources/agent.yml`. Runtime configuratio
 5. CLI `--config` path (highest priority)
 
 CLI arguments override config file values but don't persist unless `--save` is used.
+
+### 新增配置项
+
+```yaml
+# 工作流配置
+workflow:
+  # 交互模式 - 每次文件写入前确认
+  interactive: false
+
+  # 启用 LSP 语法检查 (自动下载 JDT LS 1.50.0)
+  use-lsp: false
+
+  # 启用变异测试 (需要 pom.xml 配置 PITest)
+  enableMutationTesting: false
+
+  # 最大反馈循环迭代次数
+  maxFeedbackLoopIterations: 3
+
+# 增量模式配置
+incremental:
+  # 模式: UNCOMMITTED | STAGED_ONLY | COMPARE_REFS
+  mode: UNCOMMITTED
+
+  # COMPARE_REFS 模式下的 Git refs
+  # baseRef: "main"
+  # targetRef: "HEAD"
+
+  # 文件路径排除模式
+  # excludePatterns: ".*Test\\.java"
+```
 
 ### LLM Protocols
 
@@ -134,3 +245,171 @@ To add a new tool for the Agent to use:
 3. Use `@P` for parameter descriptions
 4. The tool will be auto-discovered by `ToolFactory.loadAndWrapTools()` via reflection
 5. For initialization needs, check for instanceof in ToolFactory (like `KnowledgeBaseTool`)
+
+---
+
+## CLI 参数参考
+
+### 全局选项
+
+| 选项 | 简写 | 描述 | 默认值 |
+|------|------|------|--------|
+| `--config` | `-c` | 配置文件路径 | 自动检测 |
+| `--protocol` | | LLM 协议 | 从配置读取 |
+| `--api-key` | | API 密钥 | 从配置/环境变量读取 |
+| `--base-url` | | API 基础 URL | 协议默认值 |
+| `--model` | `-m` | 模型名称 | 从配置读取 |
+| `--temperature` | `-t` | 采样温度 (0.0-1.0) | 0.0 |
+| `--timeout` | | 请求超时(秒) | 120 |
+| `--max-retries` | | 最大重试次数 | 3 |
+| `--verbose` | `-v` | 启用详细日志 | false |
+| `--interactive` | `-i` | 启用交互确认模式 | false |
+
+### 目标选项
+
+| 选项 | 简写 | 描述 | 示例 |
+|------|------|------|------|
+| `--target` | | 单个源文件路径 | `src/main/java/Foo.java` |
+| `--project` | `-p` | 项目根目录 (批处理模式) | `/path/to/project` |
+| `--exclude` | `-e` | 排除模式 (逗号分隔) | `**/dto/**,**/vo/**` |
+| `--threshold` | | 覆盖率阈值 % | 80 |
+| `--dry-run` | | 仅分析，不生成 | |
+| `--batch-limit` | | 最大处理类数 | 无限制 |
+
+### 增量模式选项
+
+| 选项 | 描述 | 示例 |
+|------|------|------|
+| `--incremental` | 启用增量模式 | |
+| `--incremental-mode` | 模式: UNCOMMITTED/STAGED_ONLY/COMPARE_REFS | `COMPARE_REFS` |
+| `--base-ref` | 比较基准 Git ref | `main`, `HEAD~1`, `abc123` |
+| `--target-ref` | 比较目标 Git ref | `HEAD`, `feature-branch` |
+
+### 知识库选项
+
+| 选项 | 简写 | 描述 | 示例 |
+|------|------|------|------|
+| `-kb` | | 知识库路径 | `src/test/java` |
+| `--kb-types` | | 索引文件类型 | `java,md,yml` |
+
+### 内置排除模式
+
+批处理模式默认排除:
+- `**/dto/**`, `**/vo/**`, `**/domain/**`
+- `**/*DTO.java`, `**/*VO.java`, `**/*Entity.java`
+- `**/*Enum.java`, `**/*Criteria.java`
+- `**/dao/**/*DAO.java`, `**/repo/**/*Repo.java`
+
+---
+
+## 开发阶段总览 (doc/plan.md)
+
+| 阶段 | 名称 | 状态 | 优先级 |
+|------|------|------|--------|
+| Phase 1 | 技术债务清理 | ✅ 已完成 | 最高 |
+| Phase 2 | 测试模板与项目规范学习 | ✅ 已完成 | 高 |
+| Phase 3 | 测试执行结果分析与自动修复增强 | ✅ 已完成 | 高 |
+| Phase 4 | Git 增量检测 | ✅ 已完成 | 中 |
+| Phase 5 | 测试质量评估与反馈循环 | ✅ 已完成 | 中 |
+
+### Phase 1: 技术债务清理
+
+- 核心工具单元测试 (FileSystemTool, DirectoryTool, CodeAnalyzerTool, CoverageTool, MavenExecutorTool, ProjectScannerTool, TestDiscoveryTool, KnowledgeBaseTool)
+- 统一异常处理 `AgentToolException` (ErrorCode + Context + Builder 模式)
+- 配置验证与默认值增强 (ConfigValidator)
+- 日志分级精细化 (INFO/DEBUG, -Dut.agent.log.level=DEBUG)
+- 项目结构解耦 (RetryExecutor + StreamingResponseHandler)
+
+### Phase 2: 测试模板与项目规范学习
+
+- `StyleAnalyzerTool` - 分析现有测试代码风格 (Mock 偏好、断言风格、命名惯例)
+- RAG 知识库增强 - 支持检索 Markdown 文档 (CONTRIBUTING.md, TestingGuide.md)
+- 动态 Prompt 组装 (`DynamicPromptBuilder`) - 根据项目规范调整系统提示
+
+### Phase 3: 测试执行结果分析与自动修复增强
+
+- `TestReportTool` - 解析 surefire-reports/*.xml，区分错误类型
+- 错误分类修复策略 - 编译错/断言失败/环境依赖错
+- `RepairTracker` - 记录修复过程，避免死循环
+
+### Phase 4: Git 增量检测
+
+- JGit 集成 (org.eclipse.jgit 7.1.0)
+- `GitDiffTool` - 灵活的 Git 差异分析工具
+- 支持三种模式: 未提交变更/暂存区/任意 Ref 比较
+- `IncrementalAnalyzer` - 整合 Git 差异与测试任务生成
+
+### Phase 5: 测试质量评估与反馈循环
+
+- `MutationTestTool` - PITest 执行与变异分数报告解析
+- `BoundaryAnalyzerTool` - AST 边界条件分析 (if/switch/for/while/null)
+- `CoverageFeedbackEngine` - 多轮覆盖率提升引擎
+
+---
+
+## 日志级别
+
+| 级别 | 内容 |
+|-------|------|
+| `INFO` | 用户进度、关键里程碑 |
+| `DEBUG` | 工具输入输出、技术细节 |
+| `WARN` | 非致命问题 |
+| `ERROR` | 需要关注的失败 |
+
+启用详细日志:
+```bash
+# 通过命令行
+java -jar unit-test-agent-4j.jar --target Foo.java -v
+
+# 通过系统属性
+java -Dut.agent.log.level=DEBUG -jar unit-test-agent-4j.jar --target Foo.java
+```
+
+---
+
+## 语法检查工具
+
+### JavaParser 快速检查 (SyntaxCheckerTool)
+
+- **速度**: ~10ms
+- **功能**: 基本语法验证
+- **方法**: `checkSyntax()`, `checkSyntaxContent()`, `validateTestStructure()`
+
+### LSP 语义检查 (LspSyntaxCheckerTool)
+
+- **速度**: 较慢 (~100-500ms)
+- **功能**: 完整语义分析 (类型错误、缺失导入)
+- **配置**: `workflow.use-lsp: true`
+- **方法**: `initializeLsp()`, `checkSyntaxWithLsp()`, `shutdownLsp()`
+- **自动下载**: JDT Language Server 1.50.0
+
+---
+
+## 交互模式
+
+启用后，每次文件写入前会显示确认界面:
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║ WRITE FILE: src/test/java/com/example/MyServiceTest.java         ║
+║ Operation: CREATE NEW FILE                                       ║
+╟──────────────────────────────────────────────────────────────────╢
+║ Preview (first 30 lines):                                        ║
+║                                                                  ║
+║ package com.example;                                             ║
+║                                                                  ║
+║ import org.junit.jupiter.api.Test;                               ║
+║ import org.junit.jupiter.api.extension.ExtendWith;               ║
+║ ...                                                              ║
+╟──────────────────────────────────────────────────────────────────╢
+║ [Y] Confirm  [n] Cancel  [v] View full content                   ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 相关文档
+
+- `doc/plan.md` - 开发路线图
+- `README.md` - 用户文档和使用指南
+- `src/main/resources/prompts/system-prompt.st` - LLM 系统提示模板
