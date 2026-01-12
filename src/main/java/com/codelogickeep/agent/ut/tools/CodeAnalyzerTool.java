@@ -67,7 +67,9 @@ public class CodeAnalyzerTool implements AgentTool {
             }
         });
 
-        return result.toString();
+        String finalResult = result.toString();
+        log.info("Tool Output - analyzeClass: length={}", finalResult.length());
+        return finalResult;
     }
 
     @Tool("Analyze a specific method with complexity metrics and dependencies")
@@ -121,10 +123,14 @@ public class CodeAnalyzerTool implements AgentTool {
         });
 
         if (result.length() == 0) {
-            return "Method not found: " + methodName;
+            String errorMsg = "Method not found: " + methodName;
+            log.info("Tool Output - analyzeMethod: {}", errorMsg);
+            return errorMsg;
         }
 
-        return result.toString();
+        String finalResult = result.toString();
+        log.info("Tool Output - analyzeMethod: length={}", finalResult.length());
+        return finalResult;
     }
 
     @Tool("Get compact method list with complexity for test prioritization")
@@ -167,7 +173,9 @@ public class CodeAnalyzerTool implements AgentTool {
         });
 
         result.append("Total: ").append(methodCount.get()).append(" methods\n");
-        return result.toString();
+        String finalResult = result.toString();
+        log.info("Tool Output - getMethodsForTesting: length={}", finalResult.length());
+        return finalResult;
     }
 
     private int calculateComplexity(MethodDeclaration method) {

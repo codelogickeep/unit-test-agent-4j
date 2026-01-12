@@ -83,7 +83,9 @@ public class MavenExecutorTool implements AgentTool {
         command.add("test-compile");
         command.add("-B");
 
-        return executeCommand(command);
+        ExecutionResult result = executeCommand(command);
+        log.info("Tool Output - compileProject: exitCode={}", result.exitCode());
+        return result;
     }
 
     private ExecutionResult executeCommand(List<String> command) throws IOException, InterruptedException {
@@ -158,6 +160,8 @@ public class MavenExecutorTool implements AgentTool {
         }
         command.add("-B");
 
-        return executeCommand(command);
+        ExecutionResult result = executeCommand(command);
+        log.info("Tool Output - executeTest: exitCode={}", result.exitCode());
+        return result;
     }
 }

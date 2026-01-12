@@ -132,10 +132,14 @@ public class KnowledgeBaseTool implements AgentTool {
             }
 
             if (!found) {
-                return "No relevant information found in knowledge base (score < 0.6).";
+                String noResultsMsg = "No relevant information found in knowledge base (score < 0.6).";
+                log.info("Tool Output - searchKnowledge: {}", noResultsMsg);
+                return noResultsMsg;
             }
 
-            return result.toString();
+            String finalResult = result.toString();
+            log.info("Tool Output - searchKnowledge: length={}", finalResult.length());
+            return finalResult;
 
         } catch (Exception e) {
             log.error("Error searching knowledge base", e);

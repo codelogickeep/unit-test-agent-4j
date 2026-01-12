@@ -28,13 +28,15 @@ public class DirectoryTool implements AgentTool {
         }
         
         try (Stream<Path> stream = Files.list(p)) {
-            return stream.map(file -> {
+            List<String> result = stream.map(file -> {
                 if (Files.isDirectory(file)) {
                     return file.getFileName().toString() + "/";
                 } else {
                     return file.getFileName().toString();
                 }
             }).collect(Collectors.toList());
+            log.info("Tool Output - listFiles: count={}", result.size());
+            return result;
         }
     }
 
@@ -42,7 +44,9 @@ public class DirectoryTool implements AgentTool {
     public boolean directoryExists(@P("Path to the directory to check") String path) {
         log.info("Tool Input - directoryExists: path={}", path);
         Path p = Paths.get(path);
-        return Files.exists(p) && Files.isDirectory(p);
+        boolean exists = Files.exists(p) && Files.isDirectory(p);
+        log.info("Tool Output - directoryExists: {}", exists);
+        return exists;
     }
 
     @Tool("Create a directory and all non-existent parent directories.")
@@ -50,5 +54,6 @@ public class DirectoryTool implements AgentTool {
         log.info("Tool Input - createDirectory: path={}", path);
         Path p = Paths.get(path);
         Files.createDirectories(p);
+        log.info("Tool Output - createDirectory: SUCCESS");
     }
 }

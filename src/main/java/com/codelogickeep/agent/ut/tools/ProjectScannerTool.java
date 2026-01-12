@@ -105,7 +105,9 @@ public class ProjectScannerTool implements AgentTool {
             result.append("  - ").append(relativePath).append("\n");
         }
 
-        return result.toString();
+        String finalResult = result.toString();
+        log.info("Tool Output - scanProjectClasses: count={}", coreClasses.size());
+        return finalResult;
     }
 
     @Tool("Get list of core source class paths as raw list (for batch processing)")
@@ -138,11 +140,13 @@ public class ProjectScannerTool implements AgentTool {
         try (Stream<Path> stream = Files.find(srcMain, 20,
                 (p, attr) -> attr.isRegularFile() && p.toString().endsWith(".java"))) {
 
-            return stream
+            List<String> result = stream
                     .map(Path::toString)
                     .map(s -> s.replace('\\', '/'))
                     .filter(path -> !isExcluded(path, allPatterns))
                     .collect(Collectors.toList());
+            log.info("Tool Output - getSourceClassPaths: count={}", result.size());
+            return result;
         }
     }
 

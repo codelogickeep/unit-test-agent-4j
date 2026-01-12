@@ -39,8 +39,11 @@ public class CoverageTool implements AgentTool {
             StringBuilder sb = new StringBuilder();
             sb.append("Coverage Summary:\n");
             appendCounters(doc.getDocumentElement(), sb, "  ");
-            return sb.toString();
+            String result = sb.toString();
+            log.info("Tool Output - getCoverageReport: length={}", result.length());
+            return result;
         } catch (Exception e) {
+            log.error("Failed to parse coverage report", e);
             throw new IOException("Failed to parse coverage report: " + e.getMessage(), e);
         }
     }
@@ -126,8 +129,11 @@ public class CoverageTool implements AgentTool {
                 result.append("\nRecommendation: Add tests for the uncovered methods listed above.");
             }
 
-            return result.toString();
+            String finalResult = result.toString();
+            log.info("Tool Output - checkCoverageThreshold: meetsThreshold={}", meetsThreshold);
+            return finalResult;
         } catch (Exception e) {
+            log.error("Failed to analyze coverage", e);
             throw new IOException("Failed to analyze coverage: " + e.getMessage(), e);
         }
     }
@@ -187,11 +193,16 @@ public class CoverageTool implements AgentTool {
 
                     result.append("═".repeat(60)).append("\n");
                     result.append("Legend: ✓ = Good (≥80%)  ◐ = Partial  ✗ = No coverage\n");
-                    return result.toString();
+                    String finalResult = result.toString();
+                    log.info("Tool Output - getMethodCoverageDetails: length={}", finalResult.length());
+                    return finalResult;
                 }
             }
-            return "ERROR: Class '" + className + "' not found in coverage report.";
+            String errorMsg = "ERROR: Class '" + className + "' not found in coverage report.";
+            log.info("Tool Output - getMethodCoverageDetails: {}", errorMsg);
+            return errorMsg;
         } catch (Exception e) {
+            log.error("Failed to get method details", e);
             throw new IOException("Failed to get method details: " + e.getMessage(), e);
         }
     }
@@ -343,11 +354,16 @@ public class CoverageTool implements AgentTool {
             }
 
             if (uncoveredCount == 0) {
-                return "PASS: All methods meet threshold";
+                String passMsg = "PASS: All methods meet threshold";
+                log.info("Tool Output - getUncoveredMethodsCompact: {}", passMsg);
+                return passMsg;
             }
 
-            return result.toString();
+            String finalResult = result.toString();
+            log.info("Tool Output - getUncoveredMethodsCompact: uncoveredCount={}", uncoveredCount);
+            return finalResult;
         } catch (Exception e) {
+            log.error("Failed to get compact uncovered methods", e);
             throw new IOException("Failed: " + e.getMessage(), e);
         }
     }

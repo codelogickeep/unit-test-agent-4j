@@ -148,9 +148,13 @@ public class FileSystemTool implements AgentTool {
             }
 
             Files.writeString(p, newContent, StandardCharsets.UTF_8);
-            return "SUCCESS: File updated: " + path;
+            String successMsg = "SUCCESS: File updated: " + path;
+            log.info("Tool Output - searchReplace: {}", successMsg);
+            return successMsg;
         } catch (Exception e) {
-            return "ERROR: " + e.getMessage();
+            String errorMsg = "ERROR: " + e.getMessage();
+            log.error("Tool Output - searchReplace: {}", errorMsg, e);
+            return errorMsg;
         }
     }
 
@@ -159,8 +163,11 @@ public class FileSystemTool implements AgentTool {
         log.info("Tool Input - fileExists: path={}", path);
         try {
             Path p = resolveSafePath(path);
-            return Files.exists(p) && Files.isRegularFile(p);
+            boolean exists = Files.exists(p) && Files.isRegularFile(p);
+            log.info("Tool Output - fileExists: {}", exists);
+            return exists;
         } catch (Exception e) {
+            log.warn("Tool Output - fileExists: Path resolution failed for {}, returning false", path);
             return false;
         }
     }
@@ -171,10 +178,15 @@ public class FileSystemTool implements AgentTool {
         try {
             Path p = resolveSafePath(path);
             if (!Files.exists(p)) {
-                throw new IOException("File not found: " + path);
+                String errorMsg = "File not found: " + path;
+                log.warn("Tool Output - readFile: {}", errorMsg);
+                throw new IOException(errorMsg);
             }
-            return Files.readString(p, StandardCharsets.UTF_8);
+            String content = Files.readString(p, StandardCharsets.UTF_8);
+            log.info("Tool Output - readFile: length={}", content.length());
+            return content;
         } catch (Exception e) {
+            log.error("Tool Output - readFile: Failed to read {}", path, e);
             throw new IOException(e.getMessage());
         }
     }
@@ -195,8 +207,11 @@ public class FileSystemTool implements AgentTool {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, content, StandardCharsets.UTF_8);
-            return "SUCCESS: File written: " + path;
+            String successMsg = "SUCCESS: File written: " + path;
+            log.info("Tool Output - writeFile: {}", successMsg);
+            return successMsg;
         } catch (Exception e) {
+            log.error("Tool Output - writeFile: Failed to write {}", path, e);
             throw new IOException(e.getMessage());
         }
     }
@@ -232,8 +247,11 @@ public class FileSystemTool implements AgentTool {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, finalContent.toString(), StandardCharsets.UTF_8);
-            return "SUCCESS: File modified from line " + startLine + ": " + path;
+            String successMsg = "SUCCESS: File modified from line " + startLine + ": " + path;
+            log.info("Tool Output - writeFileFromLine: {}", successMsg);
+            return successMsg;
         } catch (Exception e) {
+            log.error("Tool Output - writeFileFromLine: Failed to modify {}", path, e);
             throw new IOException(e.getMessage());
         }
     }

@@ -88,7 +88,9 @@ public class TestDiscoveryTool implements AgentTool {
             result.append("  - ").append(relativePath).append("\n");
         }
 
-        return result.toString();
+        String finalResult = result.toString();
+        log.info("Tool Output - findTestClasses: count={}", foundTests.size());
+        return finalResult;
     }
 
     @Tool("Get the expected test file path for a source class (creates path even if file doesn't exist)")
@@ -103,7 +105,9 @@ public class TestDiscoveryTool implements AgentTool {
                 .replace(".java", "Test.java");
 
         boolean exists = Files.exists(Paths.get(testPath));
-        return testPath + (exists ? " (exists)" : " (not exists)");
+        String finalResult = testPath + (exists ? " (exists)" : " (not exists)");
+        log.info("Tool Output - getExpectedTestPath: {}", finalResult);
+        return finalResult;
     }
 
     @Tool("Check if a test class exists for the given source class")
@@ -123,10 +127,12 @@ public class TestDiscoveryTool implements AgentTool {
         for (String suffix : TEST_SUFFIXES) {
             Path testPath = testDir.resolve(className + suffix + ".java");
             if (Files.exists(testPath)) {
+                log.info("Tool Output - hasTestClass: true ({})", testPath);
                 return true;
             }
         }
 
+        log.info("Tool Output - hasTestClass: false");
         return false;
     }
 }
