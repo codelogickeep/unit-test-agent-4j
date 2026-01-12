@@ -33,7 +33,7 @@
 | MavenExecutorTool 单元测试 | ✅ | 测试命令构建、ExecutionResult |
 | ProjectScannerTool 单元测试 | ✅ | 测试排除规则、模式匹配 |
 | TestDiscoveryTool 单元测试 | ✅ | 测试测试类发现、路径转换 |
-| KnowledgeBaseTool 单元测试 | ⏳ | 测试 RAG 检索（可选） |
+| KnowledgeBaseTool 单元测试 | ✅ | 测试 RAG 检索、初始化、搜索 |
 
 ### 1.2 统一异常处理与错误报告
 
@@ -49,7 +49,7 @@
 |------|------|------|
 | AppConfig 必填字段校验 | ✅ | llm.apiKey, llm.modelName 必填 |
 | 智能默认值 | ✅ | temperature=0.0, timeout=120s |
-| 配置加载错误友好提示 | ⏳ | 指明具体缺失字段 |
+| 配置加载错误友好提示 | ✅ | ConfigValidator 友好提示 + getConfigSummary |
 
 ### 1.4 日志分级精细化
 
@@ -63,8 +63,8 @@
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| 检查循环依赖 | ⏳ | 使用 jdeps 分析 |
-| 优化 AgentOrchestrator | ⏳ | 提取通用逻辑 |
+| 检查循环依赖 | ✅ | 编译检查通过，无循环依赖 |
+| 优化 AgentOrchestrator | ⏳ | 提取通用逻辑（可选优化） |
 
 ---
 
@@ -200,3 +200,4 @@
 | 2026-01-12 | 0.5.0 | 完成 Phase 4: GitDiffTool, IncrementalAnalyzer 增量检测（灵活 ref 比较） |
 | 2026-01-12 | 0.6.0 | 完成 Phase 5: MutationTestTool, BoundaryAnalyzerTool, CoverageFeedbackEngine 质量反馈 |
 | 2026-01-12 | 0.7.0 | 完成 Phase 1 剩余: 单元测试 (Maven/Scanner/Discovery), AgentToolException 规范化, 日志分级 |
+| 2026-01-12 | 0.7.1 | Phase 1 完善: KnowledgeBaseTool 测试, AgentToolException 扩展 (EXTERNAL_TOOL_ERROR 等), 配置提示优化 |

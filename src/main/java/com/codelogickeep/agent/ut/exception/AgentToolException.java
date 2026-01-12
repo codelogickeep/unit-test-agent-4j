@@ -25,6 +25,20 @@ public class AgentToolException extends RuntimeException {
         this.suggestion = errorCode.getSuggestion();
     }
 
+    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion) {
+        super(message);
+        this.errorCode = errorCode;
+        this.context = context;
+        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
+    }
+
+    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+        this.context = context;
+        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
+    }
+
     public ErrorCode getErrorCode() {
         return errorCode;
     }
@@ -71,6 +85,10 @@ public class AgentToolException extends RuntimeException {
         FILE_WRITE_FAILED("E103", "Failed to write file", "Check if the path is valid and the directory exists."),
         INVALID_PATH("E104", "Invalid or null path", "Provide a valid file path relative to the project root."),
         CONTENT_NOT_FOUND("E105", "Content to replace not found", "Use 'readFile' to get the exact content first."),
+        FILE_READ_FAILED("E106", "Failed to read file", "Check file permissions and encoding."),
+        PATH_OUT_OF_BOUNDS("E107", "Path is outside project root", "Use a path within the project root directory."),
+        INVALID_ARGUMENT("E108", "Invalid argument provided", "Check the parameter value and try again."),
+        IO_ERROR("E109", "I/O operation failed", "Check file/directory permissions and disk space."),
 
         // Directory Errors (2xx)
         DIRECTORY_NOT_FOUND("E201", "Directory not found", "Use 'directoryExists' to check before listing."),
@@ -101,6 +119,11 @@ public class AgentToolException extends RuntimeException {
         KB_NOT_INITIALIZED("E701", "Knowledge base not initialized", "Specify a valid knowledge base path with -kb."),
         KB_SEARCH_FAILED("E702", "Knowledge base search failed", "Try a different search query."),
 
+        // External Tool Errors (8xx)
+        EXTERNAL_TOOL_ERROR("E801", "External tool execution failed", "Check the tool is installed and accessible."),
+        RESOURCE_NOT_FOUND("E802", "Required resource not found", "Ensure the resource exists and is accessible."),
+        PARSING_ERROR("E803", "Failed to parse data", "Check the data format is correct."),
+        
         // General Errors (9xx)
         UNKNOWN_ERROR("E999", "Unknown error occurred", "Check the logs for more details.");
 
