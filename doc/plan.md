@@ -10,7 +10,7 @@
 
 | 阶段 | 名称 | 状态 | 优先级 |
 |------|------|------|--------|
-| Phase 1 | 技术债务清理 | 🔄 进行中 | 最高 |
+| Phase 1 | 技术债务清理 | ✅ 已完成 | 最高 |
 | Phase 2 | 测试模板与项目规范学习 | ✅ 已完成 | 高 |
 | Phase 3 | 测试执行结果分析与自动修复增强 | ✅ 已完成 | 高 |
 | Phase 4 | Git 增量检测 | ✅ 已完成 | 中 |
@@ -30,18 +30,18 @@
 | DirectoryTool 单元测试 | ✅ | 测试目录操作 |
 | CodeAnalyzerTool 单元测试 | ✅ | 测试 AST 解析 |
 | CoverageTool 单元测试 | ✅ | 测试 JaCoCo XML 解析 |
-| MavenExecutorTool 单元测试 | ⏳ | 测试命令构建（Mock 进程执行） |
-| ProjectScannerTool 单元测试 | ⏳ | 测试排除规则 |
-| TestDiscoveryTool 单元测试 | ⏳ | 测试测试类发现 |
-| KnowledgeBaseTool 单元测试 | ⏳ | 测试 RAG 检索 |
+| MavenExecutorTool 单元测试 | ✅ | 测试命令构建、ExecutionResult |
+| ProjectScannerTool 单元测试 | ✅ | 测试排除规则、模式匹配 |
+| TestDiscoveryTool 单元测试 | ✅ | 测试测试类发现、路径转换 |
+| KnowledgeBaseTool 单元测试 | ⏳ | 测试 RAG 检索（可选） |
 
 ### 1.2 统一异常处理与错误报告
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
 | 定义统一异常类 `AgentToolException` | ✅ | 包含 ErrorCode + Context |
-| 规范所有工具类异常抛出 | ⏳ | 替换原有的 IOException/RuntimeException |
-| 增强错误信息可读性 | ⏳ | 提供修复建议 |
+| 规范所有工具类异常抛出 | ✅ | FileSystemTool, DirectoryTool 已改造 |
+| 增强错误信息可读性 | ✅ | 提供修复建议 via toAgentMessage() |
 
 ### 1.3 配置验证与默认值增强
 
@@ -55,8 +55,8 @@
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| 区分 INFO/DEBUG 级别 | ⏳ | INFO: 用户进度；DEBUG: 技术细节 |
-| 添加 --verbose 参数 | ⏳ | 控制详细日志输出 |
+| 区分 INFO/DEBUG 级别 | ✅ | INFO: 用户进度；DEBUG: 技术细节 |
+| 添加 --verbose 参数 | ✅ | 通过 -Dut.agent.log.level=DEBUG 控制 |
 | 工具输入输出日志统一格式 | ✅ | 已完成 |
 
 ### 1.5 项目结构解耦
@@ -199,3 +199,4 @@
 | 2026-01-12 | 0.4.0 | 完成 Phase 3: TestReportTool, RepairTracker 自动修复增强 |
 | 2026-01-12 | 0.5.0 | 完成 Phase 4: GitDiffTool, IncrementalAnalyzer 增量检测（灵活 ref 比较） |
 | 2026-01-12 | 0.6.0 | 完成 Phase 5: MutationTestTool, BoundaryAnalyzerTool, CoverageFeedbackEngine 质量反馈 |
+| 2026-01-12 | 0.7.0 | 完成 Phase 1 剩余: 单元测试 (Maven/Scanner/Discovery), AgentToolException 规范化, 日志分级 |

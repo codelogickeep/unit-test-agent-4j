@@ -29,7 +29,8 @@ public class CodeAnalyzerTool implements AgentTool {
 
     @Tool("Analyze a Java class structure to understand methods and fields")
     public String analyzeClass(@P("Path to the Java source file") String path) throws IOException {
-        log.info("Tool Input - analyzeClass: path={}", path);
+        log.info("Analyzing class structure: {}", path);
+        log.debug("Tool Input - analyzeClass: path={}", path);
         Path sourcePath = Paths.get(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
@@ -68,7 +69,7 @@ public class CodeAnalyzerTool implements AgentTool {
         });
 
         String finalResult = result.toString();
-        log.info("Tool Output - analyzeClass: length={}", finalResult.length());
+        log.debug("Tool Output - analyzeClass: length={}", finalResult.length());
         return finalResult;
     }
 
@@ -77,7 +78,8 @@ public class CodeAnalyzerTool implements AgentTool {
             @P("Path to the Java source file") String path,
             @P("Method name to analyze") String methodName
     ) throws IOException {
-        log.info("Tool Input - analyzeMethod: path={}, methodName={}", path, methodName);
+        log.info("Analyzing method: {} in {}", methodName, path);
+        log.debug("Tool Input - analyzeMethod: path={}, methodName={}", path, methodName);
         Path sourcePath = Paths.get(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 

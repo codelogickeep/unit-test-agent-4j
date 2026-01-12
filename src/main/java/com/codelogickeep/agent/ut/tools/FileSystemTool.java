@@ -1,18 +1,22 @@
 package com.codelogickeep.agent.ut.tools;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.codelogickeep.agent.ut.exception.AgentToolException;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static com.codelogickeep.agent.ut.exception.AgentToolException.ErrorCode.*;
 
 public class FileSystemTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(FileSystemTool.class);
@@ -34,9 +38,12 @@ public class FileSystemTool implements AgentTool {
         }
     }
 
-    private Path resolveSafePath(String pathStr) throws IOException {
+    private Path resolveSafePath(String pathStr) {
         if (pathStr == null || pathStr.trim().isEmpty() || "null".equalsIgnoreCase(pathStr)) {
-            throw new IOException("Path is null or empty. Please provide a valid file path relative to the project root.");
+            throw new AgentToolException(INVALID_ARGUMENT, 
+                    "Path is null or empty",
+                    "Provided path: " + pathStr,
+                    "Please provide a valid file path relative to the project root: " + projectRoot);
         }
         Path p = Paths.get(pathStr);
         if (!p.isAbsolute()) {
@@ -44,7 +51,10 @@ public class FileSystemTool implements AgentTool {
         }
         p = p.normalize();
         if (!p.startsWith(projectRoot)) {
-            throw new IOException("Access denied: Path is outside of project root: " + pathStr);
+            throw new AgentToolException(PATH_OUT_OF_BOUNDS, 
+                    "Access denied: Path is outside of project root",
+                    "Requested path: " + pathStr + ", Project root: " + projectRoot,
+                    "Use a path within the project root directory");
         }
         return p;
     }
@@ -174,26 +184,33 @@ public class FileSystemTool implements AgentTool {
     }
 
     @Tool("Read the content of a file (e.g., source code, pom.xml, or error logs).")
-    public String readFile(@P("Path to the file to read") String path) throws IOException {
+    public String readFile(@P("Path to the file to read") String path) {
         log.info("Tool Input - readFile: path={}", path);
         try {
             Path p = resolveSafePath(path);
             if (!Files.exists(p)) {
-                String errorMsg = "File not found: " + path;
-                log.warn("Tool Output - readFile: {}", errorMsg);
-                throw new IOException(errorMsg);
+                throw new AgentToolException(FILE_NOT_FOUND, 
+                        "File not found: " + path,
+                        "Attempted to read: " + p.toAbsolutePath(),
+                        "Verify the file path is correct and the file exists");
             }
             String content = Files.readString(p, StandardCharsets.UTF_8);
             log.info("Tool Output - readFile: length={}", content.length());
             return content;
-        } catch (Exception e) {
+        } catch (AgentToolException e) {
+            log.error("Tool Output - readFile: {}", e.toAgentMessage());
+            throw e;
+        } catch (IOException e) {
             log.error("Tool Output - readFile: Failed to read {}", path, e);
-            throw new IOException(e.getMessage());
+            throw new AgentToolException(FILE_READ_FAILED, 
+                    "Failed to read file: " + e.getMessage(),
+                    "File: " + path,
+                    "Check file permissions and encoding", e);
         }
     }
 
     @Tool("Write content to a file. Useful for creating new test classes.")
-    public String writeFile(@P("Path to the file") String path, @P("Full content to write") String content) throws IOException {
+    public String writeFile(@P("Path to the file") String path, @P("Full content to write") String content) {
         log.info("Tool Input - writeFile: path={}, content length={}", path, content != null ? content.length() : "null");
         try {
             Path p = resolveSafePath(path);
@@ -211,15 +228,29 @@ public class FileSystemTool implements AgentTool {
             String successMsg = "SUCCESS: File written: " + path;
             log.info("Tool Output - writeFile: {}", successMsg);
             return successMsg;
-        } catch (Exception e) {
+        } catch (AgentToolException e) {
+            log.error("Tool Output - writeFile: {}", e.toAgentMessage());
+            throw e;
+        } catch (IOException e) {
             log.error("Tool Output - writeFile: Failed to write {}", path, e);
-            throw new IOException(e.getMessage());
+            throw new AgentToolException(FILE_WRITE_FAILED, 
+                    "Failed to write file: " + e.getMessage(),
+                    "File: " + path,
+                    "Check file permissions and disk space", e);
         }
     }
 
     @Tool("Replace content in a file starting from a specific line number.")
-    public String writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) throws IOException {
+    public String writeFileFromLine(@P("Path to the file") String path, @P("New content to write from the start line") String content, @P("Line number (1-based) to start writing from") int startLine) {
         log.info("Tool Input - writeFileFromLine: path={}, startLine={}, content length={}", path, startLine, content != null ? content.length() : "null");
+        
+        if (startLine < 1) {
+            throw new AgentToolException(INVALID_ARGUMENT, 
+                    "Invalid line number: " + startLine,
+                    "Line number must be >= 1",
+                    "Use 1 for the first line of the file");
+        }
+        
         try {
             Path p = resolveSafePath(path);
             if (!Files.exists(p)) {
@@ -251,9 +282,15 @@ public class FileSystemTool implements AgentTool {
             String successMsg = "SUCCESS: File modified from line " + startLine + ": " + path;
             log.info("Tool Output - writeFileFromLine: {}", successMsg);
             return successMsg;
-        } catch (Exception e) {
+        } catch (AgentToolException e) {
+            log.error("Tool Output - writeFileFromLine: {}", e.toAgentMessage());
+            throw e;
+        } catch (IOException e) {
             log.error("Tool Output - writeFileFromLine: Failed to modify {}", path, e);
-            throw new IOException(e.getMessage());
+            throw new AgentToolException(FILE_WRITE_FAILED, 
+                    "Failed to modify file: " + e.getMessage(),
+                    "File: " + path + ", Line: " + startLine,
+                    "Check file permissions and disk space", e);
         }
     }
 }
