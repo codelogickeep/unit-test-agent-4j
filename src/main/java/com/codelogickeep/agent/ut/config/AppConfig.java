@@ -14,11 +14,36 @@ public class AppConfig {
     private List<SkillConfig> skills;
     private Map<String, String> dependencies; // New: key is artifactId, value is min version
     private BatchConfig batch; // New: batch mode settings
+    private IncrementalConfig incremental; // New: incremental mode settings
 
     @Data
     public static class BatchConfig {
         private String excludePatterns;
         private boolean dryRun = false;
+    }
+
+    @Data
+    public static class IncrementalConfig {
+        /**
+         * 增量模式: uncommitted(默认), staged, compare
+         */
+        private String mode = "uncommitted";
+        
+        /**
+         * 基准引用（用于 compare 模式）
+         * 不预设任何分支名，完全由用户指定
+         */
+        private String baseRef;
+        
+        /**
+         * 目标引用（用于 compare 模式，默认 HEAD）
+         */
+        private String targetRef = "HEAD";
+        
+        /**
+         * 排除模式列表（逗号分隔）
+         */
+        private String excludePatterns;
     }
 
     @Data

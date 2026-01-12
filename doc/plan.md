@@ -13,7 +13,7 @@
 | Phase 1 | 技术债务清理 | 🔄 进行中 | 最高 |
 | Phase 2 | 测试模板与项目规范学习 | ✅ 已完成 | 高 |
 | Phase 3 | 测试执行结果分析与自动修复增强 | ✅ 已完成 | 高 |
-| Phase 4 | Git 增量检测 | ⏳ 待开始 | 中 |
+| Phase 4 | Git 增量检测 | ✅ 已完成 | 中 |
 | Phase 5 | 测试质量评估与反馈循环 | ⏳ 待开始 | 中 |
 
 ---
@@ -130,21 +130,26 @@
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| 添加 JGit 依赖 | ⏳ | org.eclipse.jgit |
-| 新增 `GitDiffTool` | ⏳ | 读取 Git 变更 |
+| 添加 JGit 依赖 | ✅ | org.eclipse.jgit 7.1.0 |
+| 新增 `GitDiffTool` | ✅ | 灵活的 Git 差异分析工具 |
 
-### 4.2 差异分析
+### 4.2 差异分析（灵活设计）
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| 对比 HEAD 与 origin/main | ⏳ | 识别受影响的类和方法 |
-| 支持暂存区分析 | ⏳ | --staged 参数 |
+| 未提交变更检测 | ✅ | 默认模式：工作区 + 暂存区相对于 HEAD |
+| 暂存区分析 | ✅ | STAGED_ONLY 模式 |
+| 任意 Ref 比较 | ✅ | COMPARE_REFS 模式，不硬编码分支名 |
+| 分支列表工具 | ✅ | 帮助用户发现可用分支 |
+| 文件 Diff 详情 | ✅ | 获取具体文件的变更内容 |
 
 ### 4.3 增量生成工作流
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| CLI 增加 --incremental 参数 | ⏳ | 仅处理变更文件 |
+| IncrementalAnalyzer | ✅ | 整合 Git 差异与测试任务生成 |
+| AppConfig 增量配置 | ✅ | 支持 mode/baseRef/targetRef 配置 |
+| CLI 增加 --incremental 参数 | ⏳ | 后续集成到主流程 |
 | 变更影响范围分析 | ⏳ | 识别依赖此类的其他测试 |
 
 ---
@@ -186,3 +191,4 @@
 | 2026-01-12 | 0.2.3 | 完成 Phase 1.3 ConfigValidator 配置校验与默认值 |
 | 2026-01-12 | 0.3.0 | 完成 Phase 2: StyleAnalyzerTool, KnowledgeBaseTool 增强, DynamicPromptBuilder |
 | 2026-01-12 | 0.4.0 | 完成 Phase 3: TestReportTool, RepairTracker 自动修复增强 |
+| 2026-01-12 | 0.5.0 | 完成 Phase 4: GitDiffTool, IncrementalAnalyzer 增量检测（灵活 ref 比较） |
