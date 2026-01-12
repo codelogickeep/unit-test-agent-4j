@@ -147,20 +147,20 @@ Generate tests for a specific Java source file.
 
 ```bash
 # Basic usage
-java -jar unit-test-agent-4j.jar --target path/to/MyService.java
+java -jar utagent.jar --target path/to/MyService.java
 
 # With knowledge base for style matching
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --target path/to/MyService.java \
   -kb src/test/java
 
 # With interactive confirmation
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --target path/to/MyService.java \
   --interactive
 
 # With custom coverage threshold
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --target path/to/MyService.java \
   --threshold 90
 ```
@@ -171,20 +171,20 @@ Scan an entire project and generate tests for all classes needing coverage.
 
 ```bash
 # Scan entire project
-java -jar unit-test-agent-4j.jar --project /path/to/project
+java -jar utagent.jar --project /path/to/project
 
 # With exclusion rules
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --exclude "**/dto/**,**/vo/**,**/entity/**"
 
 # Dry-run mode (analysis only)
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --dry-run
 
 # Limit batch size
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --batch-limit 10
 ```
@@ -201,18 +201,18 @@ Only generate tests for files changed in Git.
 
 ```bash
 # Test uncommitted changes (working directory + staged)
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --incremental
 
 # Test only staged changes
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --incremental \
   --incremental-mode STAGED_ONLY
 
 # Compare two refs (e.g., feature branch vs main)
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --incremental \
   --incremental-mode COMPARE_REFS \
@@ -220,7 +220,7 @@ java -jar unit-test-agent-4j.jar \
   --target-ref HEAD
 
 # Compare specific commits
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --project /path/to/project \
   --incremental \
   --incremental-mode COMPARE_REFS \
@@ -240,7 +240,7 @@ java -jar unit-test-agent-4j.jar \
 Preview and confirm each file write operation.
 
 ```bash
-java -jar unit-test-agent-4j.jar \
+java -jar utagent.jar \
   --target path/to/MyService.java \
   -i
 ```
@@ -654,7 +654,7 @@ flowchart TB
 export UT_AGENT_API_KEY="your-key"
 
 # Or set via config command
-java -jar unit-test-agent-4j.jar config --api-key "your-key"
+java -jar utagent.jar config --api-key "your-key"
 ```
 
 #### 2. Maven Not Found
@@ -699,7 +699,7 @@ mvn clean test jacoco:report
 
 ```bash
 # Via command line
-java -jar unit-test-agent-4j.jar --target Foo.java -v
+java -jar utagent.jar --target Foo.java -v
 
 # Via system property
 java -Dut.agent.log.level=DEBUG -jar unit-test-agent-4j.jar --target Foo.java

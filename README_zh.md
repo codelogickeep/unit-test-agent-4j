@@ -634,7 +634,7 @@ flowchart TB
 export UT_AGENT_API_KEY="your-key"
 
 # 或通过 config 命令设置
-java -jar unit-test-agent-4j.jar config --api-key "your-key"
+java -jar utagent.jar config --api-key "your-key"
 ```
 
 #### 2. Maven 未找到
@@ -679,7 +679,7 @@ mvn clean test jacoco:report
 
 ```bash
 # 通过命令行
-java -jar unit-test-agent-4j.jar --target Foo.java -v
+java -jar utagent.jar --target Foo.java -v
 
 # 通过系统属性
 java -Dut.agent.log.level=DEBUG -jar unit-test-agent-4j.jar --target Foo.java
