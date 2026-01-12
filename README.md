@@ -45,27 +45,65 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 ### Prerequisites
 
 - **JDK 21+** (required)
-- **Maven 3.8+** (required)
+- **Maven 3.8+** (required, for building from source)
 - **Git** (optional, for incremental mode)
+
+### One-Click Install
+
+#### Linux / macOS
+
+```bash
+# Download and install with curl
+curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+
+# Or with wget
+wget -qO- https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+
+# Add to PATH (add to your ~/.bashrc or ~/.zshrc)
+export PATH="$PATH:$HOME/.utagent"
+```
+
+#### Windows (PowerShell 7+)
+
+```powershell
+# Download and install
+irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.ps1 | iex
+
+# Add to PATH manually: $env:USERPROFILE\.utagent
+```
+
+After installation, the `utagent` command will be available:
+
+```bash
+# Configure API key
+utagent config --protocol openai --api-key "sk-..." --model "gpt-4"
+
+# Generate tests
+utagent --target src/main/java/com/example/MyService.java
+```
 
 ### Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/unit-test-agent-4j.git
+git clone https://github.com/codelogickeep/unit-test-agent-4j.git
 cd unit-test-agent-4j
 
 # Build the project
 mvn clean package -DskipTests
 
 # The executable JAR is at:
-# target/unit-test-agent-4j-0.1.0-LITE-shaded.jar
+# target/utagent.jar
 ```
 
 ### Verify Installation
 
 ```bash
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --help
+# If using one-click install
+utagent --help
+
+# If building from source
+java -jar target/utagent.jar --help
 ```
 
 ## Quick Start
@@ -74,21 +112,23 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --help
 
 ```bash
 # Option A: Use config command (recommended)
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
+utagent config \
   --protocol openai \
   --api-key "sk-your-api-key" \
   --model "gpt-4o"
 
 # Option B: Set environment variable
-export UT_AGENT_API_KEY="sk-your-api-key"
-export UT_AGENT_MODEL_NAME="gpt-4o"
+export OPENAI_API_KEY="sk-your-api-key"
 ```
 
 ### Step 2: Generate Your First Test
 
 ```bash
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
-  --target src/main/java/com/example/MyService.java
+# If using one-click install
+utagent --target src/main/java/com/example/MyService.java
+
+# If building from source
+java -jar target/utagent.jar --target src/main/java/com/example/MyService.java
 ```
 
 ### Step 3: Check the Output

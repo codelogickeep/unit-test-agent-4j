@@ -45,27 +45,65 @@
 ### 前置要求
 
 - **JDK 21+**（必需）
-- **Maven 3.8+**（必需）
+- **Maven 3.8+**（从源码构建时需要）
 - **Git**（可选，用于增量模式）
+
+### 一键安装
+
+#### Linux / macOS
+
+```bash
+# 使用 curl 下载并安装
+curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+
+# 或使用 wget
+wget -qO- https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+
+# 添加到 PATH（添加到 ~/.bashrc 或 ~/.zshrc）
+export PATH="$PATH:$HOME/.utagent"
+```
+
+#### Windows (PowerShell 7+)
+
+```powershell
+# 下载并安装
+irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.ps1 | iex
+
+# 手动添加到 PATH: $env:USERPROFILE\.utagent
+```
+
+安装完成后，`utagent` 命令即可使用：
+
+```bash
+# 配置 API Key
+utagent config --protocol openai --api-key "sk-..." --model "gpt-4"
+
+# 生成测试
+utagent --target src/main/java/com/example/MyService.java
+```
 
 ### 从源码构建
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/unit-test-agent-4j.git
+git clone https://github.com/codelogickeep/unit-test-agent-4j.git
 cd unit-test-agent-4j
 
 # 构建项目
 mvn clean package -DskipTests
 
 # 可执行 JAR 位于：
-# target/unit-test-agent-4j-0.1.0-LITE-shaded.jar
+# target/utagent.jar
 ```
 
 ### 验证安装
 
 ```bash
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --help
+# 一键安装方式
+utagent --help
+
+# 从源码构建方式
+java -jar target/utagent.jar --help
 ```
 
 ## 快速开始
@@ -74,21 +112,23 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar --help
 
 ```bash
 # 方式 A：使用 config 命令（推荐）
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
+utagent config \
   --protocol openai \
   --api-key "sk-your-api-key" \
   --model "gpt-4o"
 
 # 方式 B：设置环境变量
-export UT_AGENT_API_KEY="sk-your-api-key"
-export UT_AGENT_MODEL_NAME="gpt-4o"
+export OPENAI_API_KEY="sk-your-api-key"
 ```
 
 ### 第二步：生成第一个测试
 
 ```bash
-java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
-  --target src/main/java/com/example/MyService.java
+# 一键安装方式
+utagent --target src/main/java/com/example/MyService.java
+
+# 从源码构建方式
+java -jar target/utagent.jar --target src/main/java/com/example/MyService.java
 ```
 
 ### 第三步：查看输出
@@ -107,20 +147,20 @@ Agent 将会：
 
 ```bash
 # 基本用法
-java -jar unit-test-agent-4j.jar --target path/to/MyService.java
+utagent --target path/to/MyService.java
 
 # 使用知识库匹配代码风格
-java -jar unit-test-agent-4j.jar \
+utagent \
   --target path/to/MyService.java \
   -kb src/test/java
 
 # 启用交互确认
-java -jar unit-test-agent-4j.jar \
+utagent \
   --target path/to/MyService.java \
   --interactive
 
 # 自定义覆盖率阈值
-java -jar unit-test-agent-4j.jar \
+utagent \
   --target path/to/MyService.java \
   --threshold 90
 ```
@@ -131,20 +171,20 @@ java -jar unit-test-agent-4j.jar \
 
 ```bash
 # 扫描整个项目
-java -jar unit-test-agent-4j.jar --project /path/to/project
+utagent --project /path/to/project
 
 # 使用排除规则
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --exclude "**/dto/**,**/vo/**,**/entity/**"
 
 # Dry-run 模式（仅分析）
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --dry-run
 
 # 限制批量处理数量
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --batch-limit 10
 ```
@@ -161,18 +201,18 @@ java -jar unit-test-agent-4j.jar \
 
 ```bash
 # 测试未提交的变更（工作区 + 暂存区）
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --incremental
 
 # 仅测试暂存区变更
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --incremental \
   --incremental-mode STAGED_ONLY
 
 # 比较两个 ref（如：feature 分支 vs main）
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --incremental \
   --incremental-mode COMPARE_REFS \
@@ -180,7 +220,7 @@ java -jar unit-test-agent-4j.jar \
   --target-ref HEAD
 
 # 比较特定提交
-java -jar unit-test-agent-4j.jar \
+utagent \
   --project /path/to/project \
   --incremental \
   --incremental-mode COMPARE_REFS \
@@ -200,7 +240,7 @@ java -jar unit-test-agent-4j.jar \
 预览并确认每次文件写入操作。
 
 ```bash
-java -jar unit-test-agent-4j.jar \
+utagent \
   --target path/to/MyService.java \
   -i
 ```
