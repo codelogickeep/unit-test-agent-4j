@@ -37,6 +37,8 @@
 | **覆盖率驱动增强** | 分析未覆盖方法，自动补充测试 |
 | **Git 增量检测** | 仅为变更文件生成测试（未提交/暂存/分支间比较） |
 | **变异测试** | 集成 PITest 评估测试有效性 |
+| **LSP 语法检查** | 可选的 Eclipse JDT Language Server 集成，提供完整语义分析（自动下载） |
+| **预编译验证** | 基于 JavaParser 的快速语法检查，编译前拦截错误 |
 
 ## 安装
 
@@ -328,6 +330,10 @@ workflow:
   
   # 交互模式 - 每次写入文件前确认
   interactive: false
+  
+  # 启用 LSP 语法检查（自动下载 JDT LS 1.50.0，支持 JDK 21+）
+  # 提供完整语义分析：类型错误、缺失导入
+  use-lsp: false
 
 # ═══════════════════════════════════════════════════════════════════
 # 批量模式设置
@@ -441,6 +447,17 @@ Agent 可以使用以下工具：
 | `getMethodsForTesting` | 列出适合测试的公共方法 |
 | `scanProjectClasses` | 扫描项目源类 |
 
+### 语法检查工具
+
+| 工具 | 说明 |
+|------|------|
+| `checkSyntax` | 快速 JavaParser 语法验证（~10ms） |
+| `checkSyntaxContent` | 检查代码字符串的语法 |
+| `validateTestStructure` | 验证 JUnit 5 测试类结构（@ExtendWith、@Mock、@Test） |
+| `initializeLsp` | 初始化 JDT Language Server 进行语义检查 |
+| `checkSyntaxWithLsp` | 完整语义分析（类型错误、缺失导入） |
+| `shutdownLsp` | 释放 LSP 服务资源 |
+
 ### Maven 工具
 
 | 工具 | 说明 |
@@ -476,63 +493,92 @@ Agent 可以使用以下工具：
 
 ## 系统架构
 
+```mermaid
+flowchart TB
+    subgraph Input["🖥️ 输入层"]
+        CLI[CLI / 用户输入]
+    end
+
+    subgraph Config["⚙️ 配置层"]
+        CL[配置加载器]
+        CV[配置验证器]
+        CL --> CV
+    end
+
+    subgraph Audit["🔍 环境审计"]
+        EA[环境检查器]
+        JDK[JDK 检查]
+        MVN[Maven 检查]
+        LSP[LSP 检查]
+        EA --> JDK & MVN & LSP
+    end
+
+    subgraph Orchestrator["🎯 Agent 编排器"]
+        AO[AgentOrchestrator]
+        RE[RetryExecutor<br/>指数退避重试]
+        SRH[StreamingResponseHandler<br/>实时流式输出]
+        RT[RepairTracker<br/>修复追踪]
+        DPB[DynamicPromptBuilder<br/>动态提示词]
+        AO --> RE & SRH & RT & DPB
+    end
+
+    subgraph AI["🤖 LangChain4j AI 服务"]
+        SCM[流式聊天模型]
+        TE[工具执行]
+        MEM[对话记忆]
+    end
+
+    subgraph Tools["🛠️ 工具层"]
+        subgraph FileTools["文件操作"]
+            FS[FileSystemTool]
+            DIR[DirectoryTool]
+        end
+        subgraph CodeTools["代码分析"]
+            CA[CodeAnalyzerTool]
+            SC[SyntaxCheckerTool<br/>JavaParser]
+            LSPC[LspSyntaxCheckerTool<br/>JDT LS]
+        end
+        subgraph BuildTools["构建测试"]
+            ME[MavenExecutorTool]
+            COV[CoverageTool]
+            MUT[MutationTestTool]
+        end
+        subgraph VCSTools["版本控制"]
+            GIT[GitDiffTool]
+            PS[ProjectScannerTool]
+        end
+        subgraph KBTools["知识库"]
+            KB[KnowledgeBaseTool]
+            CFE[CoverageFeedbackEngine]
+        end
+    end
+
+    CLI --> CL
+    CV --> EA
+    EA --> AO
+    AO --> SCM
+    SCM --> TE
+    TE --> Tools
+    MEM -.-> SCM
+
+    style Input fill:#e1f5fe
+    style Config fill:#fff3e0
+    style Audit fill:#f3e5f5
+    style Orchestrator fill:#e8f5e9
+    style AI fill:#fce4ec
+    style Tools fill:#f5f5f5
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         CLI / 用户输入                              │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          配置加载器                                 │
-│  • 加载 agent.yml                                                   │
-│  • 验证配置 (ConfigValidator)                                       │
-│  • 应用默认值                                                       │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          环境审计器                                 │
-│  • 检查 JDK 版本                                                    │
-│  • 验证 Maven 安装                                                  │
-│  • 扫描 pom.xml 依赖                                                │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Agent 编排器                                 │
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │   RetryExecutor     │  │   StreamingResponseHandler          │  │
-│  │  • 指数退避         │  │  • 实时输出                          │  │
-│  │  • 可配置参数       │  │  • Token 统计                        │  │
-│  └─────────────────────┘  └─────────────────────────────────────┘  │
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │  RepairTracker      │  │   DynamicPromptBuilder              │  │
-│  │  • 修复历史跟踪     │  │  • 项目感知提示词                    │  │
-│  │  • 避免死循环       │  │  • 风格指南                          │  │
-│  └─────────────────────┘  └─────────────────────────────────────┘  │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      LangChain4j AI 服务                            │
-│  • 流式聊天模型                                                      │
-│  • 工具执行                                                         │
-│  • 内存管理                                                         │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                           工具层                                    │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
-│  │ FileSystem  │ │ CodeAnalyzer│ │   Maven     │ │  Coverage   │  │
-│  │    Tool     │ │    Tool     │ │  Executor   │ │    Tool     │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
-│  │  Directory  │ │  GitDiff    │ │ Knowledge   │ │   Style     │  │
-│  │    Tool     │ │    Tool     │ │   Base      │ │  Analyzer   │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
+
+### 组件说明
+
+| 层级 | 组件 | 说明 |
+|------|------|------|
+| **输入层** | CLI | 基于 picocli 的命令行界面 |
+| **配置层** | ConfigLoader | 支持环境变量的 YAML 配置 |
+| **环境审计** | EnvironmentChecker | 验证 JDK、Maven、LSP 可用性 |
+| **编排器** | AgentOrchestrator | 核心循环，支持重试和流式输出 |
+| **AI 服务** | LangChain4j | 流式对话与工具执行 |
+| **工具层** | 15+ 工具 | 文件、代码、构建、Git、覆盖率操作 |
 
 ## 故障排除
 

@@ -77,6 +77,18 @@
             <version>7.1.0.202411261347-r</version>
         </dependency>
 
+        <!-- LSP Support -->
+        <dependency>
+            <groupId>org.eclipse.lsp4j</groupId>
+            <artifactId>org.eclipse.lsp4j</artifactId>
+            <version>0.23.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.lsp4j</groupId>
+            <artifactId>org.eclipse.lsp4j.jsonrpc</artifactId>
+            <version>0.23.1</version>
+        </dependency>
+
         <!-- Configuration -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>

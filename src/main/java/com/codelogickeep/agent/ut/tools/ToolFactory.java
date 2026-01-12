@@ -28,9 +28,19 @@ public class ToolFactory {
 
         Set<Class<? extends AgentTool>> toolClasses = reflections.getSubTypesOf(AgentTool.class);
 
+        // 检查是否启用 LSP
+        boolean useLsp = appConfig.getWorkflow() != null && appConfig.getWorkflow().isUseLsp();
+
         for (Class<? extends AgentTool> clazz : toolClasses) {
             // Skip interfaces and abstract classes
             if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
+                continue;
+            }
+            
+            // 根据配置决定是否加载 LSP 相关工具
+            String className = clazz.getSimpleName();
+            if (className.equals("LspSyntaxCheckerTool") && !useLsp) {
+                log.info("Skipping LspSyntaxCheckerTool (use-lsp not enabled in config)");
                 continue;
             }
 

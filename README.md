@@ -37,6 +37,8 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 | **Coverage-Driven Enhancement** | Analyzes uncovered methods and supplements tests automatically |
 | **Git Incremental Detection** | Only generates tests for changed files (uncommitted/staged/between refs) |
 | **Mutation Testing** | Integrates PITest to assess test effectiveness |
+| **LSP Syntax Checking** | Optional Eclipse JDT Language Server integration for semantic analysis (auto-download) |
+| **Pre-compile Validation** | JavaParser-based fast syntax checking before compilation |
 
 ## Installation
 
@@ -329,6 +331,10 @@ workflow:
   # Interactive mode - confirm before each file write
   interactive: false
   
+  # Enable LSP syntax checking (auto-downloads JDT LS 1.50.0)
+  # Provides full semantic analysis: type errors, missing imports
+  use-lsp: false
+  
   # Enable mutation testing (requires PITest in pom.xml)
   # enableMutationTesting: false
   
@@ -461,6 +467,17 @@ The agent has access to the following tools:
 | `getMethodsForTesting` | List public methods suitable for testing |
 | `scanProjectClasses` | Scan project for source classes |
 
+### Syntax Checking Tools
+
+| Tool | Description |
+|------|-------------|
+| `checkSyntax` | Fast JavaParser-based syntax validation (~10ms) |
+| `checkSyntaxContent` | Check syntax of code content string |
+| `validateTestStructure` | Verify JUnit 5 test class patterns (@ExtendWith, @Mock, @Test) |
+| `initializeLsp` | Initialize JDT Language Server for semantic checking |
+| `checkSyntaxWithLsp` | Full semantic analysis (type errors, missing imports) |
+| `shutdownLsp` | Release LSP server resources |
+
 ### Maven Tools
 
 | Tool | Description |
@@ -496,64 +513,92 @@ The agent has access to the following tools:
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph Input["🖥️ Input Layer"]
+        CLI[CLI / User Input]
+    end
+
+    subgraph Config["⚙️ Configuration"]
+        CL[Configuration Loader]
+        CV[Config Validator]
+        CL --> CV
+    end
+
+    subgraph Audit["🔍 Environment Audit"]
+        EA[Environment Checker]
+        JDK[JDK Check]
+        MVN[Maven Check]
+        LSP[LSP Check]
+        EA --> JDK & MVN & LSP
+    end
+
+    subgraph Orchestrator["🎯 Agent Orchestrator"]
+        AO[AgentOrchestrator]
+        RE[RetryExecutor<br/>Exponential Backoff]
+        SRH[StreamingResponseHandler<br/>Real-time Output]
+        RT[RepairTracker<br/>Avoid Loops]
+        DPB[DynamicPromptBuilder<br/>Context-aware Prompts]
+        AO --> RE & SRH & RT & DPB
+    end
+
+    subgraph AI["🤖 LangChain4j AI Services"]
+        SCM[Streaming Chat Model]
+        TE[Tool Execution]
+        MEM[Chat Memory]
+    end
+
+    subgraph Tools["🛠️ Tool Layer"]
+        subgraph FileTools["File Operations"]
+            FS[FileSystemTool]
+            DIR[DirectoryTool]
+        end
+        subgraph CodeTools["Code Analysis"]
+            CA[CodeAnalyzerTool]
+            SC[SyntaxCheckerTool<br/>JavaParser]
+            LSPC[LspSyntaxCheckerTool<br/>JDT LS]
+        end
+        subgraph BuildTools["Build & Test"]
+            ME[MavenExecutorTool]
+            COV[CoverageTool]
+            MUT[MutationTestTool]
+        end
+        subgraph VCSTools["Version Control"]
+            GIT[GitDiffTool]
+            PS[ProjectScannerTool]
+        end
+        subgraph KBTools["Knowledge"]
+            KB[KnowledgeBaseTool]
+            CFE[CoverageFeedbackEngine]
+        end
+    end
+
+    CLI --> CL
+    CV --> EA
+    EA --> AO
+    AO --> SCM
+    SCM --> TE
+    TE --> Tools
+    MEM -.-> SCM
+
+    style Input fill:#e1f5fe
+    style Config fill:#fff3e0
+    style Audit fill:#f3e5f5
+    style Orchestrator fill:#e8f5e9
+    style AI fill:#fce4ec
+    style Tools fill:#f5f5f5
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           CLI / User Input                          │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Configuration Loader                          │
-│  • Load agent.yml                                                   │
-│  • Validate config (ConfigValidator)                                │
-│  • Apply defaults                                                   │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Environment Auditor                           │
-│  • Check JDK version                                                │
-│  • Verify Maven installation                                        │
-│  • Scan pom.xml for dependencies                                    │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       Agent Orchestrator                             │
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │   RetryExecutor     │  │   StreamingResponseHandler          │  │
-│  │  • Exponential      │  │  • Real-time output                 │  │
-│  │    backoff          │  │  • Token counting                   │  │
-│  │  • Configurable     │  │  • Error handling                   │  │
-│  └─────────────────────┘  └─────────────────────────────────────┘  │
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │  RepairTracker      │  │   DynamicPromptBuilder              │  │
-│  │  • Repair history   │  │  • Project-aware prompts            │  │
-│  │  • Avoid loops      │  │  • Style guidelines                 │  │
-│  └─────────────────────┘  └─────────────────────────────────────┘  │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   LangChain4j AI Services                            │
-│  • Streaming Chat Model                                             │
-│  • Tool Execution                                                   │
-│  • Memory Management                                                │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Tool Layer                                    │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
-│  │ FileSystem  │ │ CodeAnalyzer│ │   Maven     │ │  Coverage   │  │
-│  │    Tool     │ │    Tool     │ │  Executor   │ │    Tool     │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
-│  │  Directory  │ │  GitDiff    │ │ Knowledge   │ │   Style     │  │
-│  │    Tool     │ │    Tool     │ │   Base      │ │  Analyzer   │  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
+
+### Component Overview
+
+| Layer | Component | Description |
+|-------|-----------|-------------|
+| **Input** | CLI | Command-line interface with picocli |
+| **Config** | ConfigLoader | YAML config with env variable support |
+| **Audit** | EnvironmentChecker | Validates JDK, Maven, LSP availability |
+| **Orchestrator** | AgentOrchestrator | Core loop with retry and streaming |
+| **AI** | LangChain4j | Streaming chat with tool execution |
+| **Tools** | 15+ Tools | File, Code, Build, Git, Coverage operations |
 
 ## Troubleshooting
 

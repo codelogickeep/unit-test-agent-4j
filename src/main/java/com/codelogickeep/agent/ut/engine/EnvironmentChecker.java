@@ -1,6 +1,7 @@
 package com.codelogickeep.agent.ut.engine;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
+import com.codelogickeep.agent.ut.tools.JdtLsManager;
 
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -44,12 +45,14 @@ public class EnvironmentChecker {
         boolean mvnOk = checkMaven();
         boolean llmOk = checkLlm(config);
         boolean permOk = checkPermissions();
+        boolean lspOk = checkLsp(config);
         boolean projectOk = projectRoot == null || auditProject(config, projectRoot);
 
         System.out.println("\n>>> Environment Check Summary:");
         System.out.println("Maven:       " + (mvnOk ? "OK" : "FAILED"));
         System.out.println("LLM:         " + (llmOk ? "OK" : "FAILED"));
         System.out.println("Permissions: " + (permOk ? "OK" : "FAILED"));
+        System.out.println("LSP Server:  " + (lspOk ? "OK" : "OPTIONAL (Auto-download available)"));
         if (projectRoot != null) {
             System.out.println("Project Dep: " + (projectOk ? "OK" : "WARNING (Dependency issues found)"));
         }
@@ -61,6 +64,38 @@ public class EnvironmentChecker {
             System.out.println("    The Agent will attempt to fix pom.xml automatically during execution.");
         } else {
             System.out.println("\n>>> Environment is ready!");
+        }
+    }
+    
+    /**
+     * 检查 LSP 服务 (JDT Language Server) 可用性
+     * 自动下载如果未安装
+     */
+    private static boolean checkLsp(AppConfig config) {
+        // 检查配置中是否启用了 LSP
+        boolean lspEnabled = config.getWorkflow() != null && 
+                             config.getWorkflow().isUseLsp();
+        
+        if (!lspEnabled) {
+            System.out.print("Checking LSP Server (JDT LS)... ");
+            System.out.println("SKIPPED (LSP not enabled in config, use 'use-lsp: true' to enable)");
+            return true;
+        }
+        
+        System.out.print("Checking LSP Server (JDT LS)... ");
+        try {
+            JdtLsManager manager = new JdtLsManager();
+            if (manager.ensureJdtLsAvailable()) {
+                System.out.println("OK (JDT Language Server available)");
+                return true;
+            } else {
+                System.out.println("WARNING (JDT LS not found, will auto-download on first use)");
+                return false;
+            }
+        } catch (Exception e) {
+            System.out.println("WARNING (" + e.getMessage() + ")");
+            System.out.println("  Note: LSP is optional. JavaParser will be used as fallback.");
+            return false;
         }
     }
 

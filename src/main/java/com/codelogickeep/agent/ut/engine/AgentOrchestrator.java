@@ -105,12 +105,14 @@ public class AgentOrchestrator {
         // 打印注册的工具
         logRegisteredTools();
 
-        // 创建 AI Service
-        UnitTestAssistant assistant = createAssistant(systemPrompt);
-
         // 使用重试执行器执行任务
+        // 注意：每次重试都创建新的 assistant，避免 ChatMemory 累积导致消息格式问题
         RetryExecutor.ExecutionResult<OrchestrationResult> result = retryExecutor.execute(
-                () -> executeTask(assistant, targetFile, taskContext),
+                () -> {
+                    // 每次执行都创建新的 assistant，清空 ChatMemory
+                    UnitTestAssistant assistant = createAssistant(systemPrompt);
+                    return executeTask(assistant, targetFile, taskContext);
+                },
                 "Test Generation for " + extractFileName(targetFile)
         );
 

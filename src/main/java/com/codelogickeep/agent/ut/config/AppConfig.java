@@ -69,6 +69,8 @@ public class AppConfig {
         private int maxRetries;
         private int coverageThreshold = 80; // 默认 80% 覆盖率阈值
         private boolean interactive = false; // 交互式确认模式
+        @JsonProperty("use-lsp")
+        private boolean useLsp = false; // 是否使用 LSP 进行语法检查（默认使用 JavaParser）
     }
     
     @Data

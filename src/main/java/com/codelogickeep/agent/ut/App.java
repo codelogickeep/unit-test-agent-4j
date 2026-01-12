@@ -3,6 +3,7 @@ import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
 import com.codelogickeep.agent.ut.engine.LlmClient;
 import com.codelogickeep.agent.ut.tools.FileSystemTool;
+import com.codelogickeep.agent.ut.tools.MavenExecutorTool;
 import com.codelogickeep.agent.ut.tools.ToolFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -165,7 +166,13 @@ public class App implements Callable<Integer> {
             LlmClient llmClient = new LlmClient(config.getLlm());
             
             // Detect Project Root (Directory containing pom.xml near target file)
-            String projectRoot = detectProjectRoot(targetFile);
+            // If --project is specified, use it as the project root
+            String projectRoot;
+            if (projectDir != null) {
+                projectRoot = new File(projectDir).getAbsolutePath();
+            } else {
+                projectRoot = detectProjectRoot(targetFile);
+            }
             
             // Perform Project Audit at startup
             com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
@@ -187,7 +194,15 @@ public class App implements Callable<Integer> {
             );
 
             // 5. Run Agent
-            if (projectDir != null) {
+            if (projectDir != null && targetFile != null) {
+                // Single file mode with explicit project directory
+                // targetFile is relative to projectDir
+                String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
+                System.out.println(">>> Agent started for target: " + absoluteTargetPath);
+                System.out.println(">>> Project root: " + projectRoot);
+                orchestrator.run(targetFile);
+                System.out.println(">>> Agent finished.");
+            } else if (projectDir != null) {
                 // Batch mode
                 return runBatchMode(config, llmClient, tools, projectRoot);
             } else if (targetFile != null) {

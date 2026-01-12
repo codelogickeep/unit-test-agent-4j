@@ -46,13 +46,26 @@ You MUST follow this strict sequence of steps:
         *   If `fileExists` returned false, use `writeFile` to write the complete file.
         *   If `fileExists` returned true (file already exists), DO NOT overwrite the whole file unless necessary. Instead, identify the closing brace `}` of the class and use `writeFileFromLine` to insert new methods before the end, or append to the end of the file. Explicitly calculate the line number to start writing/appending if possible.
 
-6.  **Verification & Repair (Mandatory)**:
-    *   **Compile**: Use `compileProject` to check for syntax errors.
+6.  **Pre-compile Syntax Check (Recommended)**:
+    *   **Option A: Basic Check (JavaParser)** - Use `checkSyntax` for fast syntax validation:
+        - Catches missing semicolons, braces, basic syntax errors
+        - Fast (~10ms) but cannot detect type errors or missing imports fully
+    *   **Option B: Full Check (LSP)** - Use `initializeLsp` then `checkSyntaxWithLsp` for complete semantic checking:
+        - Initialize LSP once per project: `initializeLsp(projectPath)`
+        - Then check files: `checkSyntaxWithLsp(filePath)`
+        - Detects ALL errors: type mismatches, missing imports, undefined methods
+        - Slower but catches errors that would fail compilation
+        - Call `shutdownLsp` when done to release resources
+    *   If syntax check returns errors, fix them immediately before running `compileProject`.
+    *   Use `validateTestStructure` to verify test class patterns (e.g., @ExtendWith annotation with @Mock fields).
+
+7.  **Verification & Repair (Mandatory)**:
+    *   **Compile**: Use `compileProject` to check for compile errors.
     *   **Run Tests**: Use `executeTest` to run the generated tests.
     *   **Fix Errors**: If compilation or tests fail, analyze the error output, use `searchReplace` or `writeFile` to fix the code, and retry until tests pass or you reach the retry limit.
     *   **Coverage Check**: Use `getCoverageReport` to get the overall coverage summary.
 
-7.  **Coverage-Driven Test Enhancement (NEW)**:
+8.  **Coverage-Driven Test Enhancement**:
     *   After tests pass, use `checkCoverageThreshold` to verify if the class meets the coverage threshold (default: 80%).
     *   **If coverage is BELOW threshold**:
         1.  Analyze the list of uncovered methods returned by the tool.
