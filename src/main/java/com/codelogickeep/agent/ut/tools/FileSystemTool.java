@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -121,7 +122,7 @@ public class FileSystemTool implements AgentTool {
             if (!content.contains(oldString)) {
                 return "ERROR: oldString NOT FOUND. Please use 'readFile' to get the exact content first.";
             }
-            String newContent = content.replaceFirst(Pattern.quote(oldString), newString);
+            String newContent = content.replaceFirst(Pattern.quote(oldString), Matcher.quoteReplacement(newString));
 
             if (interactive) {
                 // Show diff-like preview
