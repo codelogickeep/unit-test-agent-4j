@@ -206,7 +206,7 @@ java -jar unit-test-agent-4j.jar \
 **Interactive Prompts:**
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║ WRITE FILE: src/test/java/com/example/MyServiceTest.java        ║
+║ WRITE FILE: src/test/java/com/example/MyServiceTest.java         ║
 ║ Operation: CREATE NEW FILE                                       ║
 ╟──────────────────────────────────────────────────────────────────╢
 ║ Preview (first 30 lines):                                        ║

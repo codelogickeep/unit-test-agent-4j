@@ -216,8 +216,8 @@ public class KnowledgeBaseTool implements AgentTool {
         }
     }
 
-    @Tool("Search for information in the knowledge base with default settings")
-    public String searchKnowledge(@P("Search query or keywords") String query) {
+    // Internal helper - delegates to the full method
+    public String searchKnowledge(String query) {
         return searchKnowledge(query, "all");
     }
 
