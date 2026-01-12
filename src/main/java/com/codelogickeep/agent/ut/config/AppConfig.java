@@ -13,6 +13,13 @@ public class AppConfig {
     private McpConfig mcp;
     private List<SkillConfig> skills;
     private Map<String, String> dependencies; // New: key is artifactId, value is min version
+    private BatchConfig batch; // New: batch mode settings
+
+    @Data
+    public static class BatchConfig {
+        private String excludePatterns;
+        private boolean dryRun = false;
+    }
 
     @Data
     public static class LlmConfig {
