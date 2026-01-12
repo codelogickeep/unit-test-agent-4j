@@ -24,24 +24,24 @@ public class DirectoryTool implements AgentTool {
         log.info("Tool Input - listFiles: path={}", path);
         
         if (path == null || path.trim().isEmpty()) {
-            throw new AgentToolException(INVALID_ARGUMENT, 
-                    "Path is null or empty",
-                    "Provided path: " + path,
-                    "Please provide a valid directory path");
+            throw AgentToolException.builder(INVALID_ARGUMENT, "Path is null or empty")
+                    .context("Provided path: " + path)
+                    .suggestion("Please provide a valid directory path")
+                    .build();
         }
         
         Path p = Paths.get(path);
         if (!Files.exists(p)) {
-            throw new AgentToolException(DIRECTORY_NOT_FOUND, 
-                    "Directory not found: " + path,
-                    "Attempted to list: " + p.toAbsolutePath(),
-                    "Verify the directory path is correct and exists");
+            throw AgentToolException.builder(DIRECTORY_NOT_FOUND, "Directory not found: " + path)
+                    .context("Attempted to list: " + p.toAbsolutePath())
+                    .suggestion("Verify the directory path is correct and exists")
+                    .build();
         }
         if (!Files.isDirectory(p)) {
-            throw new AgentToolException(INVALID_ARGUMENT, 
-                    "Path is not a directory: " + path,
-                    "The path points to a file, not a directory",
-                    "Use a directory path, not a file path");
+            throw AgentToolException.builder(INVALID_ARGUMENT, "Path is not a directory: " + path)
+                    .context("The path points to a file, not a directory")
+                    .suggestion("Use a directory path, not a file path")
+                    .build();
         }
         
         try (Stream<Path> stream = Files.list(p)) {
@@ -55,10 +55,11 @@ public class DirectoryTool implements AgentTool {
             log.info("Tool Output - listFiles: count={}", result.size());
             return result;
         } catch (IOException e) {
-            throw new AgentToolException(IO_ERROR, 
-                    "Failed to list directory: " + e.getMessage(),
-                    "Directory: " + path,
-                    "Check directory permissions", e);
+            throw AgentToolException.builder(IO_ERROR, "Failed to list directory: " + e.getMessage())
+                    .context("Directory: " + path)
+                    .suggestion("Check directory permissions")
+                    .cause(e)
+                    .build();
         }
     }
 
@@ -76,10 +77,10 @@ public class DirectoryTool implements AgentTool {
         log.info("Tool Input - createDirectory: path={}", path);
         
         if (path == null || path.trim().isEmpty()) {
-            throw new AgentToolException(INVALID_ARGUMENT, 
-                    "Path is null or empty",
-                    "Provided path: " + path,
-                    "Please provide a valid directory path to create");
+            throw AgentToolException.builder(INVALID_ARGUMENT, "Path is null or empty")
+                    .context("Provided path: " + path)
+                    .suggestion("Please provide a valid directory path to create")
+                    .build();
         }
         
         try {
@@ -87,10 +88,11 @@ public class DirectoryTool implements AgentTool {
             Files.createDirectories(p);
             log.info("Tool Output - createDirectory: SUCCESS");
         } catch (IOException e) {
-            throw new AgentToolException(IO_ERROR, 
-                    "Failed to create directory: " + e.getMessage(),
-                    "Directory: " + path,
-                    "Check parent directory permissions and disk space", e);
+            throw AgentToolException.builder(IO_ERROR, "Failed to create directory: " + e.getMessage())
+                    .context("Directory: " + path)
+                    .suggestion("Check parent directory permissions and disk space")
+                    .cause(e)
+                    .build();
         }
     }
 }

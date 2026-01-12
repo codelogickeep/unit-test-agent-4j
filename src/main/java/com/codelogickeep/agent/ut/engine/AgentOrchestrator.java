@@ -1,10 +1,13 @@
 package com.codelogickeep.agent.ut.engine;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
+import com.codelogickeep.agent.ut.tools.StyleAnalyzerTool;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
+import lombok.Builder;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -14,14 +17,28 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
+/**
+ * Agent 编排器 - 协调 LLM 与工具的交互
+ * 
+ * 重构后的特性：
+ * - 使用 RetryExecutor 进行重试
+ * - 使用 StreamingResponseHandler 处理流式响应
+ * - 支持 DynamicPromptBuilder 动态构建 Prompt
+ * - 集成 RepairTracker 跟踪修复历史
+ */
 @Slf4j
 public class AgentOrchestrator {
 
     private final AppConfig config;
     private final StreamingChatModel streamingLlm;
     private final List<Object> tools;
+    
+    // 可选的增强组件
+    private DynamicPromptBuilder dynamicPromptBuilder;
+    private RepairTracker repairTracker;
+    private RetryExecutor retryExecutor;
+    private StreamingResponseHandler streamingHandler;
 
     public AgentOrchestrator(AppConfig config,
             StreamingChatModel streamingLlm,
@@ -29,6 +46,47 @@ public class AgentOrchestrator {
         this.config = config;
         this.streamingLlm = streamingLlm;
         this.tools = tools;
+        
+        // 初始化辅助组件
+        initializeComponents();
+    }
+
+    private void initializeComponents() {
+        // 初始化重试执行器
+        int maxRetries = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() : 3;
+        this.retryExecutor = new RetryExecutor(
+                RetryExecutor.RetryConfig.builder()
+                        .maxRetries(maxRetries)
+                        .initialWaitMs(1000)
+                        .backoffMultiplier(2.0)
+                        .maxWaitMs(30000)
+                        .logStackTrace(false)
+                        .build()
+        );
+
+        // 初始化流式响应处理器
+        this.streamingHandler = new StreamingResponseHandler();
+
+        // 初始化修复跟踪器
+        this.repairTracker = new RepairTracker();
+
+        // 尝试初始化动态 Prompt 构建器
+        try {
+            this.dynamicPromptBuilder = new DynamicPromptBuilder(config);
+            log.debug("DynamicPromptBuilder initialized");
+        } catch (Exception e) {
+            log.debug("DynamicPromptBuilder not available: {}", e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T findTool(Class<T> toolClass) {
+        for (Object tool : tools) {
+            if (toolClass.isInstance(tool)) {
+                return (T) tool;
+            }
+        }
+        return null;
     }
 
     public void run(String targetFile) {
@@ -37,75 +95,163 @@ public class AgentOrchestrator {
 
     public void run(String targetFile, String taskContext) {
         log.info("Starting Agent orchestration for target: {}", targetFile);
-
-        // Load System Prompt dynamically
-        String systemPrompt = loadSystemPrompt();
         
-        // Debug: Print registered tool names
-        for (Object tool : tools) {
-             log.info("Agent Tool Registered: {}", tool.getClass().getSimpleName());
-        }
+        // 提取项目根路径
+        String projectRoot = extractProjectRoot(targetFile);
 
-        // Create the AI Service (Assistant)
-        UnitTestAssistant assistant = AiServices.builder(UnitTestAssistant.class)
-                .streamingChatModel(streamingLlm)
-                .chatMemory(MessageWindowChatMemory.withMaxMessages(20))
-                .tools(tools)
-                .systemMessageProvider(chatMemoryId -> systemPrompt)
-                .build();
+        // 加载 System Prompt（优先使用动态构建器）
+        String systemPrompt = buildSystemPrompt(projectRoot);
+        
+        // 打印注册的工具
+        logRegisteredTools();
 
-        int maxRetries = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() : 0;
-        int attempt = 0;
-        boolean success = false;
+        // 创建 AI Service
+        UnitTestAssistant assistant = createAssistant(systemPrompt);
 
-        while (attempt <= maxRetries && !success) {
-            if (attempt > 0) {
-                log.info("Retrying... (Attempt {}/{})", attempt, maxRetries);
-            }
+        // 使用重试执行器执行任务
+        RetryExecutor.ExecutionResult<OrchestrationResult> result = retryExecutor.execute(
+                () -> executeTask(assistant, targetFile, taskContext),
+                "Test Generation for " + extractFileName(targetFile)
+        );
 
-            try {
-                String userMessage = taskContext != null
-                        ? taskContext + "\n\nTarget file: " + targetFile
-                        : targetFile;
-                TokenStream tokenStream = assistant.generateTest(userMessage);
-                StringBuilder contentBuilder = new StringBuilder();
-                CompletableFuture<String> future = new CompletableFuture<>();
-
-                tokenStream.onPartialResponse(token -> {
-                    System.out.print(token);
-                    System.out.flush();
-                    contentBuilder.append(token);
-                })
-                        .onCompleteResponse(response -> {
-                            System.out.println();
-                            future.complete(contentBuilder.toString());
-                        })
-                        .onError(future::completeExceptionally)
-                        .start();
-
-                String result = future.join();
-                log.info("Agent completed task. Result length: {}", result.length());
-                success = true;
-            } catch (Exception e) {
-                attempt++;
-                log.error("Agent failed on attempt {}", attempt, e);
-                
-                if (attempt <= maxRetries) {
-                    long waitTime = (long) Math.pow(2, attempt) * 1000;
-                    log.info("Waiting {}ms before retrying...", waitTime);
-                    try {
-                        Thread.sleep(waitTime);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                } else {
-                    log.error("Max retries reached. Aborting.");
-                }
+        // 处理结果
+        if (result.isSuccess()) {
+            OrchestrationResult taskResult = result.getResult();
+            log.info("Agent completed task successfully. {}", taskResult.getSummary());
+        } else {
+            log.error("Agent failed to complete task. {}", result.getSummary());
+            
+            if (result.getLastException() != null) {
+                log.debug("Final exception:", result.getLastException());
             }
         }
     }
 
+    /**
+     * 执行单次任务（可能被重试）
+     */
+    private OrchestrationResult executeTask(UnitTestAssistant assistant, String targetFile, String taskContext) {
+        String userMessage = buildUserMessage(targetFile, taskContext);
+        
+        log.debug("Sending message to LLM: {}", userMessage.substring(0, Math.min(100, userMessage.length())) + "...");
+        
+        TokenStream tokenStream = assistant.generateTest(userMessage);
+        StreamingResponseHandler.StreamingResult streamingResult = streamingHandler.handle(tokenStream);
+
+        if (!streamingResult.isSuccess()) {
+            throw new RuntimeException("Streaming failed: " + 
+                    (streamingResult.getError() != null ? streamingResult.getError().getMessage() : "Unknown error"));
+        }
+
+        return OrchestrationResult.builder()
+                .success(true)
+                .content(streamingResult.getContent())
+                .tokenCount(streamingResult.getTokenCount())
+                .durationMs(streamingResult.getDurationMs())
+                .build();
+    }
+
+    /**
+     * 构建 System Prompt
+     */
+    private String buildSystemPrompt(String projectRoot) {
+        // 优先使用动态 Prompt 构建器
+        if (dynamicPromptBuilder != null && projectRoot != null) {
+            try {
+                String dynamicPrompt = dynamicPromptBuilder.buildSystemPrompt(projectRoot);
+                log.info("Using dynamically built system prompt");
+                return dynamicPrompt;
+            } catch (Exception e) {
+                log.warn("Failed to build dynamic prompt, falling back to static: {}", e.getMessage());
+            }
+        }
+
+        // 回退到静态加载
+        return loadSystemPrompt();
+    }
+
+    /**
+     * 构建用户消息
+     */
+    private String buildUserMessage(String targetFile, String taskContext) {
+        StringBuilder message = new StringBuilder();
+        
+        // 添加修复历史上下文（如果有）
+        if (repairTracker != null && repairTracker.shouldContinue()) {
+            String repairContext = repairTracker.getRepairContext(null);
+            if (!repairContext.contains("No previous repair attempts")) {
+                message.append("--- Previous Repair Attempts ---\n");
+                message.append(repairContext);
+                message.append("\n");
+            }
+        }
+        
+        // 添加任务上下文
+        if (taskContext != null && !taskContext.isEmpty()) {
+            message.append(taskContext).append("\n\n");
+        }
+        
+        // 添加目标文件
+        message.append("Target file: ").append(targetFile);
+        
+        return message.toString();
+    }
+
+    /**
+     * 创建 AI Assistant
+     */
+    private UnitTestAssistant createAssistant(String systemPrompt) {
+        int memorySize = 20; // 可配置
+        
+        return AiServices.builder(UnitTestAssistant.class)
+                .streamingChatModel(streamingLlm)
+                .chatMemory(MessageWindowChatMemory.withMaxMessages(memorySize))
+                .tools(tools)
+                .systemMessageProvider(chatMemoryId -> systemPrompt)
+                .build();
+    }
+
+    /**
+     * 打印注册的工具
+     */
+    private void logRegisteredTools() {
+        log.info("Registered {} tools:", tools.size());
+        for (Object tool : tools) {
+            log.info("  - {}", tool.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 从目标文件路径提取项目根目录
+     */
+    private String extractProjectRoot(String targetFile) {
+        if (targetFile == null) return null;
+        
+        String normalized = targetFile.replace("\\", "/");
+        int srcMainIndex = normalized.indexOf("/src/main/java/");
+        if (srcMainIndex > 0) {
+            return normalized.substring(0, srcMainIndex);
+        }
+        
+        int srcIndex = normalized.indexOf("/src/");
+        if (srcIndex > 0) {
+            return normalized.substring(0, srcIndex);
+        }
+        
+        return null;
+    }
+
+    /**
+     * 提取文件名
+     */
+    private String extractFileName(String path) {
+        if (path == null) return "unknown";
+        return Paths.get(path).getFileName().toString();
+    }
+
+    /**
+     * 加载静态 System Prompt
+     */
     private String loadSystemPrompt() {
         String defaultPrompt = """
                 You are an expert Java QA Engineer. Your task is to analyze Java code and
@@ -125,7 +271,6 @@ public class AgentOrchestrator {
                 }
                 
                 // 2. Try classpath
-                // Remove leading slash if present for classpath resource loading
                 String resourcePath = pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
                 try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
                     if (in != null) {
@@ -144,8 +289,44 @@ public class AgentOrchestrator {
         return defaultPrompt;
     }
 
+    // ==================== Getter 方法（用于测试和扩展）====================
+
+    public RepairTracker getRepairTracker() {
+        return repairTracker;
+    }
+
+    public void setRepairTracker(RepairTracker repairTracker) {
+        this.repairTracker = repairTracker;
+    }
+
+    public void setDynamicPromptBuilder(DynamicPromptBuilder dynamicPromptBuilder) {
+        this.dynamicPromptBuilder = dynamicPromptBuilder;
+    }
+
+    // ==================== 结果类 ====================
+
+    @Data
+    @Builder
+    public static class OrchestrationResult {
+        private boolean success;
+        private String content;
+        private int tokenCount;
+        private long durationMs;
+        private String errorMessage;
+
+        public String getSummary() {
+            if (success) {
+                return String.format("Generated %d chars, %d tokens in %dms",
+                        content != null ? content.length() : 0, tokenCount, durationMs);
+            } else {
+                return "Failed: " + (errorMessage != null ? errorMessage : "Unknown error");
+            }
+        }
+    }
+
+    // ==================== Assistant 接口 ====================
+
     interface UnitTestAssistant {
-        // SystemMessage is now provided dynamically
         TokenStream generateTest(String targetFilePath);
     }
 }

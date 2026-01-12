@@ -64,7 +64,7 @@
 | 任务 | 状态 | 说明 |
 |------|------|------|
 | 检查循环依赖 | ✅ | 编译检查通过，无循环依赖 |
-| 优化 AgentOrchestrator | ⏳ | 提取通用逻辑（可选优化） |
+| 优化 AgentOrchestrator | ✅ | 重构：RetryExecutor + StreamingResponseHandler |
 
 ---
 
@@ -201,3 +201,4 @@
 | 2026-01-12 | 0.6.0 | 完成 Phase 5: MutationTestTool, BoundaryAnalyzerTool, CoverageFeedbackEngine 质量反馈 |
 | 2026-01-12 | 0.7.0 | 完成 Phase 1 剩余: 单元测试 (Maven/Scanner/Discovery), AgentToolException 规范化, 日志分级 |
 | 2026-01-12 | 0.7.1 | Phase 1 完善: KnowledgeBaseTool 测试, AgentToolException 扩展 (EXTERNAL_TOOL_ERROR 等), 配置提示优化 |
+| 2026-01-12 | 0.8.0 | Phase 1 完成: AgentOrchestrator 重构 (RetryExecutor + StreamingResponseHandler), AgentToolException Builder 模式 |

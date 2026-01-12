@@ -10,14 +10,29 @@ public class AgentToolException extends RuntimeException {
     private final String context;
     private final String suggestion;
 
+    /**
+     * Basic constructor with error code and message.
+     */
     public AgentToolException(ErrorCode errorCode, String message) {
-        this(errorCode, message, null, null);
+        super(message);
+        this.errorCode = errorCode;
+        this.context = null;
+        this.suggestion = errorCode.getSuggestion();
     }
 
+    /**
+     * Constructor with error code, message, and context.
+     */
     public AgentToolException(ErrorCode errorCode, String message, String context) {
-        this(errorCode, message, context, null);
+        super(message);
+        this.errorCode = errorCode;
+        this.context = context;
+        this.suggestion = errorCode.getSuggestion();
     }
 
+    /**
+     * Constructor with error code, message, context, and cause.
+     */
     public AgentToolException(ErrorCode errorCode, String message, String context, Throwable cause) {
         super(message, cause);
         this.errorCode = errorCode;
@@ -25,18 +40,21 @@ public class AgentToolException extends RuntimeException {
         this.suggestion = errorCode.getSuggestion();
     }
 
-    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion) {
-        super(message);
-        this.errorCode = errorCode;
-        this.context = context;
-        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
+    /**
+     * Private constructor for builder pattern.
+     */
+    private AgentToolException(Builder builder) {
+        super(builder.message, builder.cause);
+        this.errorCode = builder.errorCode;
+        this.context = builder.context;
+        this.suggestion = builder.suggestion != null ? builder.suggestion : builder.errorCode.getSuggestion();
     }
 
-    public AgentToolException(ErrorCode errorCode, String message, String context, String customSuggestion, Throwable cause) {
-        super(message, cause);
-        this.errorCode = errorCode;
-        this.context = context;
-        this.suggestion = customSuggestion != null ? customSuggestion : errorCode.getSuggestion();
+    /**
+     * Create a builder for more flexible exception construction.
+     */
+    public static Builder builder(ErrorCode errorCode, String message) {
+        return new Builder(errorCode, message);
     }
 
     public ErrorCode getErrorCode() {
@@ -73,6 +91,41 @@ public class AgentToolException extends RuntimeException {
     @Override
     public String toString() {
         return toAgentMessage();
+    }
+
+    /**
+     * Builder for AgentToolException with custom suggestion support.
+     */
+    public static class Builder {
+        private final ErrorCode errorCode;
+        private final String message;
+        private String context;
+        private String suggestion;
+        private Throwable cause;
+
+        private Builder(ErrorCode errorCode, String message) {
+            this.errorCode = errorCode;
+            this.message = message;
+        }
+
+        public Builder context(String context) {
+            this.context = context;
+            return this;
+        }
+
+        public Builder suggestion(String suggestion) {
+            this.suggestion = suggestion;
+            return this;
+        }
+
+        public Builder cause(Throwable cause) {
+            this.cause = cause;
+            return this;
+        }
+
+        public AgentToolException build() {
+            return new AgentToolException(this);
+        }
     }
 
     /**
