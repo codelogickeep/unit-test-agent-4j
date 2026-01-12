@@ -1,50 +1,50 @@
 # Unit Test Agent 4j
 
-企业级 Java 单元测试智能体 (Agent)，专注于为遗留系统 (Legacy Code) 自动生成高质量的 JUnit 5 + Mockito 测试代码。
+An enterprise-grade Java Unit Test Agent focusing on automatically generating high-quality JUnit 5 + Mockito test code for legacy systems.
 
-## 核心特性
+## Core Features
 
-- **多模型原生支持**: 原生支持 OpenAI、Anthropic (Claude) 和 Gemini 协议，并兼容各类 OpenAI 格式代理。
-- **智能环境审计**: 启动时自动检测项目依赖（JUnit 5, Mockito, JaCoCo 等）及其版本，发现低版本或缺失时自动提示。
-- **自我修复机制**: Agent 会自动编译并运行生成的测试，根据错误日志（如版本冲突、缺少依赖、语法错误）自动修复测试代码或 `pom.xml`。
-- **标准化测试**: 强制遵循 JUnit 5 (`@ExtendWith(MockitoExtension.class)`)、Mockito (`@Mock`, `@InjectMocks`) 以及 `mockito-inline`（支持静态类 Mock）标准。
-- **项目根目录保护**: 自动识别 `pom.xml` 锁定项目根目录，确保文件操作安全可控，防止路径幻觉。
-- **指数退避重试**: 针对 API 速率限制 (Rate Limit) 自动进行指数退避重试，提高任务成功率。
-- **RAG 知识库**: 支持通过检索现有单测案例或开发手册，确保生成的代码风格与项目一致。
-- **覆盖率驱动增强**: 自动检测覆盖率是否达标，未达标时分析未覆盖方法并自动补充测试用例。
-- **ERP 项目适配**: 针对企业级 Java 项目优化，支持复杂依赖注入、事务边界、DTO 映射等场景。
+- **Multi-Model Native Support**: Native support for OpenAI, Anthropic (Claude), and Gemini protocols, compatible with various OpenAI-format proxies.
+- **Intelligent Environment Audit**: Automatically detects project dependencies (JUnit 5, Mockito, JaCoCo, etc.) and their versions upon startup, providing alerts for low versions or missing dependencies.
+- **Self-Healing Mechanism**: The Agent automatically compiles and runs generated tests, and repairs test code or `pom.xml` based on error logs (e.g., version conflicts, missing dependencies, syntax errors).
+- **Standardized Testing**: Enforces adherence to JUnit 5 (`@ExtendWith(MockitoExtension.class)`), Mockito (`@Mock`, `@InjectMocks`), and `mockito-inline` (supporting static class mocking) standards.
+- **Project Root Protection**: Automatically identifies `pom.xml` to lock the project root directory, ensuring safe and controllable file operations and preventing path hallucinations.
+- **Exponential Backoff Retry**: Automatically performs exponential backoff retries for API rate limits to improve task success rates.
+- **RAG Knowledge Base**: Supports retrieving existing unit test cases or development manuals to ensure generated code style is consistent with the project.
+- **Coverage-Driven Enhancement**: Automatically detects if coverage reaches the threshold; if not, it analyzes uncovered methods and supplements test cases automatically.
+- **ERP Project Adaptation**: Optimized for enterprise Java projects, supporting complex dependency injection, transaction boundaries, DTO mapping, and more.
 
-## 快速开始
+## Quick Start
 
-### 前置要求
+### Prerequisites
 
 - JDK 21+
 - Maven 3.8+
-- 设置 API Key（见下文）
+- Set API Key (see below)
 
-### 构建项目
+### Build Project
 
 ```bash
 mvn clean package
 ```
 
-构建成功后，可执行 Jar 包位于 `target/unit-test-agent-4j-0.1.0-LITE-shaded.jar`。
+After a successful build, the executable Jar is located at `target/unit-test-agent-4j-0.1.0-LITE-shaded.jar`.
 
-### 运行
+### Running
 
-#### 1. 配置
+#### 1. Configuration
 
-使用 `config` 命令设置全局配置，保存至 `agent.yml`。
+Use the `config` command to set global configuration, saved to `agent.yml`.
 
 ```bash
-# 设置 Gemini 协议示例
+# Example for Gemini protocol
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
   --protocol gemini \
   --api-key "sk-..." \
   --model "gemini-1.5-pro" \
   --temperature 0.0
 
-# 设置 OpenAI 协议示例 (如阿里云百炼)
+# Example for OpenAI protocol (e.g., Alibaba Cloud Bailian)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
   --protocol openai \
   --api-key "sk-..." \
@@ -52,37 +52,37 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar config \
   --model "qwen-max"
 ```
 
-#### 2. 生成测试
+#### 2. Generate Tests
 
-**单文件模式**：为指定文件生成测试
+**Single File Mode**: Generate tests for a specific file
 ```bash
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --target src/main/java/com/example/MyService.java
 ```
 
-**批量模式**：扫描整个工程，自动识别需要测试的类
+**Batch Mode**: Scan the entire project and automatically identify classes needing tests
 ```bash
-# 扫描整个工程
+# Scan entire project
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --project E:\MyProject
 
-# 带排除规则（排除 DTO、VO 等）
+# With exclusion rules (exclude DTOs, VOs, etc.)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --project E:\MyProject \
   --exclude "**/dto/**,**/vo/**,**/domain/**"
 
-# 设置覆盖率阈值
+# Set coverage threshold
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --project E:\MyProject \
   --threshold 70
 
-# 仅分析不生成（dry-run 模式）
+# Dry-run mode (analysis only, no generation)
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --project E:\MyProject \
   --dry-run
 ```
 
-#### 3. 命令行参数覆盖
+#### 3. CLI Parameter Overrides
 
 ```bash
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
@@ -93,9 +93,9 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   --max-retries 5
 ```
 
-#### 4. 交互式模式
+#### 4. Interactive Mode
 
-使用 `-i` 或 `--interactive` 参数启用交互式确认模式，在写入文件前预览并确认：
+Use `-i` or `--interactive` to enable interactive confirmation mode, allowing you to preview and confirm before files are written:
 
 ```bash
 java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
@@ -103,45 +103,45 @@ java -jar target/unit-test-agent-4j-0.1.0-LITE-shaded.jar \
   -i
 ```
 
-交互式模式下，每次写入文件前会显示：
-- 操作类型（创建新文件/覆盖文件/修改文件）
-- 文件路径
-- 内容预览（前 30 行）
-- 确认选项：`Y` 确认 / `n` 取消 / `v` 查看完整内容
+In interactive mode, before each file write, it displays:
+- Operation type (Create new file / Overwrite / Modify)
+- File path
+- Content preview (first 30 lines)
+- Confirmation options: `Y` (Confirm) / `n` (Cancel) / `v` (View full content)
 
-## 配置指南
+## Configuration Guide
 
-Agent 会按以下顺序搜索 `agent.yml`：
-1. 命令行参数 `--config`
-2. **JAR 包所在目录 (推荐)**
-3. 当前运行目录
-4. 用户主目录 (`~/.unit-test-agent/`)
+The Agent searches for `agent.yml` in the following order:
+1. CLI parameter `--config`
+2. **Directory where the JAR is located (Recommended)**
+3. Current working directory
+4. User home directory (`~/.unit-test-agent/`)
 
-### 完整配置 (`agent.yml`)
+### Full Configuration (`agent.yml`)
 
 ```yaml
-# LLM 设置
+# LLM Settings
 llm:
-  protocol: "openai" # 支持: openai | anthropic | gemini
-  apiKey: "${env:UT_AGENT_API_KEY}" # 支持读取环境变量
-  baseUrl: "${env:UT_AGENT_BASE_URL}" # 自动处理 /v1 或 /v1beta 后缀
+  protocol: "openai" # Supported: openai | anthropic | gemini
+  apiKey: "${env:UT_AGENT_API_KEY}" # Supports environment variables
+  baseUrl: "${env:UT_AGENT_BASE_URL}" # Automatically handles /v1 or /v1beta suffixes
   modelName: "${env:UT_AGENT_MODEL_NAME}"
-  temperature: 0.0 # 推荐值: 0.0 (精确) 或 0.1 (稍带创造性)
-  timeout: 120 # 超时时间 (秒)
-  customHeaders: {} # 自定义 HTTP 头
+  temperature: 0.0 # Recommended: 0.0 (Precise) or 0.1 (Slightly creative)
+  timeout: 120 # Timeout (seconds)
+  customHeaders: {} # Custom HTTP headers
 
-# 工作流设置
+# Workflow Settings
 workflow:
-  maxRetries: 3 # 任务失败后的最大重试次数
-  coverageThreshold: 80 # 覆盖率阈值 (%)，未达标时自动补充测试
-  interactive: false # 交互式确认模式，写入文件前需用户确认
+  maxRetries: 3 # Max retries after task failure
+  coverageThreshold: 80 # Coverage threshold (%), supplements tests if not reached
+  interactive: false # Interactive confirmation mode
 
-# 批量模式设置
+# Batch Mode Settings
 batch:
-  excludePatterns: "" # 排除规则 (glob 模式，逗号分隔)
-  dryRun: false # 仅分析不生成
+  excludePatterns: "" # Exclusion rules (glob pattern, comma-separated)
+  dryRun: false # Analysis only, no generation
 
-# 推荐依赖及最低版本 (环境自检使用)
+# Recommended Dependencies and Minimum Versions (used for environment self-check)
 dependencies:
   junit-jupiter: "5.10.1"
   mockito-core: "5.8.0"
@@ -149,45 +149,24 @@ dependencies:
   mockito-inline: "5.8.0"
   jacoco-maven-plugin: "0.8.11"
 
-# Prompts 配置
+# Prompts Configuration
 prompts:
   system: "prompts/system-prompt.st"
 
-# MCP 配置
+# MCP Configuration
 mcp:
   servers: []
 
-# Skills 配置
+# Skills Configuration
 skills: []
 ```
 
-### 配置参数说明
+## Architecture
 
-| 分类 | 参数 | 说明 |
-|------|------|------|
-| **llm** | protocol | 协议类型 (openai/openai-zhipu/anthropic/gemini) |
-| | apiKey | API 密钥，支持 `${env:VAR}` 环境变量 |
-| | baseUrl | 基础 URL，自动处理 /v1 后缀 |
-| | modelName | 模型名称 |
-| | temperature | 温度 (0.0 精确 ~ 1.0 创造性) |
-| | timeout | 请求超时时间 (秒) |
-| | customHeaders | 自定义 HTTP 请求头 |
-| **workflow** | maxRetries | 失败后最大重试次数 |
-| | coverageThreshold | 覆盖率阈值 (%)，未达标自动补充测试 |
-| | interactive | 交互式确认模式 |
-| **batch** | excludePatterns | 批量模式排除规则 (glob 模式) |
-| | dryRun | 仅分析不生成测试 |
-| **dependencies** | * | 推荐依赖版本，用于环境检查 |
-| **prompts** | system | 系统提示词模板路径 |
-| **mcp** | servers | MCP 服务器配置列表 |
-| **skills** | * | 自定义技能配置 |
+The system adopts an **Agent-Tool** architecture:
 
-## 开发架构
-
-系统采用 **Agent-Tool** 架构：
-
-1.  **Agent Layer**: 负责推理、任务编排和自我修复逻辑 (基于 LangChain4j)。
-2.  **Infrastructure Layer**: 负责执行具体任务的工具集（文件 IO、AST 解析、Maven 指令等）。
+1.  **Agent Layer**: Responsible for reasoning, task orchestration, and self-healing logic (based on LangChain4j).
+2.  **Infrastructure Layer**: Toolset for executing specific tasks (File I/O, AST parsing, Maven commands, etc.).
 
 ```mermaid
 graph TD
@@ -216,95 +195,29 @@ graph TD
     LLM -->|2. Call Tool| KB
 ```
 
-## 平台兼容性
-- **Windows**: 优先探测并使用 **PowerShell 7 (pwsh)**，自动处理 Windows 路径编码。
-- **Linux/macOS**: 使用标准 `sh` 和 `mvn` 指令。
+## Platform Compatibility
+- **Windows**: Priority detection and use of **PowerShell 7 (pwsh)**, automatically handling Windows path encoding.
+- **Linux/macOS**: Uses standard `sh` and `mvn` commands.
 
-## 批量模式（精准单测生成）
+## Batch Mode (Precise Unit Test Generation)
 
-批量模式通过预分析减少 LLM 调用，只为未覆盖/低覆盖的方法生成测试。
+Batch mode reduces LLM calls through pre-analysis, generating tests only for uncovered or low-coverage methods.
 
-### 工作流程
+### Workflow
 
-1. **扫描工程**：识别 `src/main/java` 下的核心代码类
-2. **排除非核心类**：自动排除 DTO、VO、Entity、Enum 等数据类
-3. **分析覆盖率**：读取 JaCoCo 报告，识别未覆盖方法
-4. **精准生成**：只为需要测试的方法调用 LLM
+1. **Scan Project**: Identify core code classes under `src/main/java`.
+2. **Exclude Non-Core Classes**: Automatically exclude DTO, VO, Entity, Enum, and other data classes.
+3. **Analyze Coverage**: Read JaCoCo reports to identify uncovered methods.
+4. **Precise Generation**: Call LLM only for methods requiring tests.
 
-### 命令行参数
+## Coverage-Driven Testing
 
-| 参数 | 简写 | 说明 |
-|------|------|------|
-| `--project` | `-p` | 工程根目录路径 |
-| `--exclude` | `-e` | 排除规则（glob 模式，逗号分隔） |
-| `--threshold` | | 覆盖率阈值（默认 80%） |
-| `--dry-run` | | 仅分析不生成，输出报告 |
+The Agent supports coverage-driven test enhancement to ensure generated tests reach the specified threshold.
 
-### 内置排除规则
+### Workflow
 
-批量模式默认排除以下类型：
-- `**/dto/**`, `**/vo/**`, `**/domain/**`
-- `**/*DTO.java`, `**/*VO.java`, `**/*Entity.java`
-- `**/*Enum.java`, `**/*Criteria.java`
-- `**/dao/**/*DAO.java`, `**/repo/**/*Repo.java`
-
-### Dry-Run 输出示例
-
-```
-=== Batch Analysis Report ===
-
-Project: E:\MyProject
-Coverage Threshold: 80%
-Classes needing tests: 3
-
-────────────────────────────────────────────────────────────
-Class: com.example.service.OrderService
-Source: src/main/java/com/example/service/OrderService.java
-Test: src/test/java/com/example/service/OrderServiceTest.java
-Uncovered methods:
-  - calculateDiscount(BigDecimal, int) : 30%
-  - validateOrder(Order) : 0%
-────────────────────────────────────────────────────────────
-
-Total: 3 classes, 8 methods need tests
-```
-
-## 覆盖率驱动测试
-
-Agent 支持覆盖率驱动的测试增强功能，确保生成的测试达到指定的覆盖率阈值。
-
-### 工作流程
-
-1. 生成初始测试并运行
-2. 检查覆盖率是否达到阈值（默认 80%）
-3. 如未达标，分析未覆盖的方法
-4. 自动补充针对性测试用例
-5. 重复直到达标或无法继续改进
-
-### 覆盖率工具
-
-| 工具 | 功能 | 使用场景 |
-|------|------|----------|
-| `getCoverageReport` | 获取项目整体覆盖率摘要 | 测试运行后查看总览 |
-| `checkCoverageThreshold` | 检查类是否达标，列出未覆盖方法 | 判断是否需要补充测试 |
-| `getMethodCoverageDetails` | 获取方法级覆盖率详情 | 规划补充测试时使用 |
-
-### 示例输出
-
-```
-Coverage Analysis for: com.example.OrderService
-──────────────────────────────────────────────────
-Line Coverage:   65.2% (threshold: 80%)
-Branch Coverage: 45.0%
-Method Coverage: 75.0%
-──────────────────────────────────────────────────
-✗ FAILED: Coverage below threshold.
-
-Uncovered/Partially Covered Methods:
-  - calculateDiscount(2 params) (30% covered)
-  - validateOrder(1 params) (0% covered)
-  - processRefund() (50% covered)
-
-Recommendation: Add tests for the uncovered methods listed above.
-```
-
+1. Generate initial tests and run them.
+2. Check if coverage reaches the threshold (default 80%).
+3. If not reached, analyze uncovered methods.
+4. Automatically supplement targeted test cases.
+5. Repeat until reached or no further improvement possible.

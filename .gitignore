@@ -13,7 +13,6 @@ target/
 *.swo
 
 # User requested
-doc/
 test-config.yml
 test-governance.yml
 cp.txt
