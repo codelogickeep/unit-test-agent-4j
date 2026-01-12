@@ -14,7 +14,7 @@
 | Phase 2 | 测试模板与项目规范学习 | ✅ 已完成 | 高 |
 | Phase 3 | 测试执行结果分析与自动修复增强 | ✅ 已完成 | 高 |
 | Phase 4 | Git 增量检测 | ✅ 已完成 | 中 |
-| Phase 5 | 测试质量评估与反馈循环 | ⏳ 待开始 | 中 |
+| Phase 5 | 测试质量评估与反馈循环 | ✅ 已完成 | 中 |
 
 ---
 
@@ -162,22 +162,28 @@
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| PITest 插件集成 | ⏳ | 检测测试有效性 |
-| 变异分数报告 | ⏳ | 评估测试质量 |
+| `MutationTestTool` 创建 | ✅ | PITest 执行与报告解析 |
+| 变异分数报告 | ✅ | 支持 XML/HTML 报告解析 |
+| PITest 配置检查 | ✅ | 提供 pom.xml 配置模板 |
+| 改进建议生成 | ✅ | 基于存活变异提供修复策略 |
 
 ### 5.2 边界值覆盖分析
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| AST 条件分支分析 | ⏳ | 识别 if/switch 边界 |
-| 边界值测试建议 | ⏳ | null, empty, max/min |
+| `BoundaryAnalyzerTool` 创建 | ✅ | AST 边界条件分析 |
+| 条件类型识别 | ✅ | if/switch/for/while/null 检查 |
+| 边界值测试模板 | ✅ | numeric/string/collection/null/boolean |
+| 测试建议生成 | ✅ | 自动生成边界值测试建议 |
 
 ### 5.3 覆盖率反馈环
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| 智能决策修改/新增测试 | ⏳ | 根据未覆盖方法特征判断 |
-| 多轮覆盖率提升 | ⏳ | 直到达标或无法继续 |
+| `CoverageFeedbackEngine` 创建 | ✅ | 多轮覆盖率提升引擎 |
+| 智能决策修改/新增测试 | ✅ | 结合边界分析和变异测试 |
+| 迭代历史跟踪 | ✅ | 防止无效循环 |
+| 下一步行动建议 | ✅ | ADD_NEW/STRENGTHEN/BOUNDARY/MANUAL |
 
 ---
 
@@ -192,3 +198,4 @@
 | 2026-01-12 | 0.3.0 | 完成 Phase 2: StyleAnalyzerTool, KnowledgeBaseTool 增强, DynamicPromptBuilder |
 | 2026-01-12 | 0.4.0 | 完成 Phase 3: TestReportTool, RepairTracker 自动修复增强 |
 | 2026-01-12 | 0.5.0 | 完成 Phase 4: GitDiffTool, IncrementalAnalyzer 增量检测（灵活 ref 比较） |
+| 2026-01-12 | 0.6.0 | 完成 Phase 5: MutationTestTool, BoundaryAnalyzerTool, CoverageFeedbackEngine 质量反馈 |
