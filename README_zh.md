@@ -45,19 +45,18 @@
 ### 前置要求
 
 - **JDK 21+**（必需）
-- **Maven 3.8+**（从源码构建时需要）
-- **Git**（可选，用于增量模式）
+- **Maven 3.8+**（必需，用于构建）
+- **Git**（必需，用于克隆源码）
 
-### 一键安装
+### 快速安装（推荐）
+
+使用我们的一键构建脚本，自动完成环境检查、源码克隆、项目构建和安装。
 
 #### Linux / macOS
 
 ```bash
-# 使用 curl 下载并安装
-curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
-
-# 或使用 wget
-wget -qO- https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+# 一键克隆、构建并安装
+curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/build.sh | bash
 
 # 添加到 PATH（添加到 ~/.bashrc 或 ~/.zshrc）
 export PATH="$PATH:$HOME/.utagent"
@@ -66,13 +65,20 @@ export PATH="$PATH:$HOME/.utagent"
 #### Windows (PowerShell 7+)
 
 ```powershell
-# 下载并安装
-irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.ps1 | iex
+# 一键克隆、构建并安装
+irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/build.ps1 | iex
 
 # 手动添加到 PATH: $env:USERPROFILE\.utagent
 ```
 
-安装完成后，`utagent` 命令即可使用：
+构建脚本会自动：
+1. 检查环境（Java 21+、Maven 3.8+、Git）
+2. 克隆源码
+3. 使用 Maven 构建项目（需要 2-5 分钟）
+4. 安装 `utagent` 命令到 `~/.utagent`（Windows 为 `%USERPROFILE%\.utagent`）
+5. 清理构建文件
+
+安装完成后即可使用：
 
 ```bash
 # 配置 API Key
@@ -82,7 +88,9 @@ utagent config --protocol openai --api-key "sk-..." --model "gpt-4"
 utagent --target src/main/java/com/example/MyService.java
 ```
 
-### 从源码构建
+### 手动从源码构建
+
+如果你想手动构建，请按以下步骤操作：
 
 ```bash
 # 克隆仓库
@@ -92,8 +100,19 @@ cd unit-test-agent-4j
 # 构建项目
 mvn clean package -DskipTests
 
-# 可执行 JAR 位于：
-# target/utagent.jar
+# 创建安装目录
+mkdir -p ~/.utagent
+
+# 复制 JAR 文件
+cp target/utagent.jar ~/.utagent/
+
+# 创建命令脚本
+echo '#!/usr/bin/env bash
+java -jar "$HOME/.utagent/utagent.jar" "$@"' > ~/.utagent/utagent
+chmod +x ~/.utagent/utagent
+
+# 添加到 PATH
+export PATH="$PATH:$HOME/.utagent"
 ```
 
 ### 验证安装

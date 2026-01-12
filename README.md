@@ -46,18 +46,17 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 
 - **JDK 21+** (required)
 - **Maven 3.8+** (required, for building from source)
-- **Git** (optional, for incremental mode)
+- **Git** (required, for cloning and building)
 
-### One-Click Install
+### Quick Install (Recommended)
+
+The easiest way to install is to use our automated build script that clones the source, checks the environment, builds the project, and installs it for you.
 
 #### Linux / macOS
 
 ```bash
-# Download and install with curl
-curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
-
-# Or with wget
-wget -qO- https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.sh | bash
+# Clone, build, and install in one command
+curl -sSL https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/build.sh | bash
 
 # Add to PATH (add to your ~/.bashrc or ~/.zshrc)
 export PATH="$PATH:$HOME/.utagent"
@@ -66,13 +65,20 @@ export PATH="$PATH:$HOME/.utagent"
 #### Windows (PowerShell 7+)
 
 ```powershell
-# Download and install
-irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/install.ps1 | iex
+# Clone, build, and install in one command
+irm https://raw.githubusercontent.com/codelogickeep/unit-test-agent-4j/main/build.ps1 | iex
 
 # Add to PATH manually: $env:USERPROFILE\.utagent
 ```
 
-After installation, the `utagent` command will be available:
+The build script will:
+1. Check your environment (Java 21+, Maven 3.8+, Git)
+2. Clone the source code
+3. Build the project with Maven (takes 2-5 minutes)
+4. Install `utagent` command to `~/.utagent` (or `%USERPROFILE%\.utagent` on Windows)
+5. Clean up build files
+
+After installation:
 
 ```bash
 # Configure API key
@@ -82,7 +88,7 @@ utagent config --protocol openai --api-key "sk-..." --model "gpt-4"
 utagent --target src/main/java/com/example/MyService.java
 ```
 
-### Build from Source
+### Manual Build from Source
 
 ```bash
 # Clone the repository
