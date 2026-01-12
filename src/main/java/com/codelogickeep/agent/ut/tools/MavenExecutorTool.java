@@ -1,9 +1,12 @@
 package com.codelogickeep.agent.ut.tools;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +19,21 @@ import dev.langchain4j.agent.tool.Tool;
 public class MavenExecutorTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(MavenExecutorTool.class);
     private static String cachedShell = null;
+    private Path projectRoot = Paths.get(".").toAbsolutePath().normalize();
+
+    /**
+     * Set the project root directory where Maven commands will be executed.
+     */
+    public void setProjectRoot(String rootPath) {
+        if (rootPath != null) {
+            this.projectRoot = Paths.get(rootPath).toAbsolutePath().normalize();
+            log.info("MavenExecutorTool project root set to: {}", projectRoot);
+        }
+    }
+
+    public Path getProjectRoot() {
+        return projectRoot;
+    }
 
     public record ExecutionResult(int exitCode, String stdOut, String stdErr) {
         //java.lang.ProcessBuilder
@@ -90,6 +108,8 @@ public class MavenExecutorTool implements AgentTool {
 
     private ExecutionResult executeCommand(List<String> command) throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
+        pb.directory(projectRoot.toFile());
+        log.debug("Executing Maven in directory: {}", projectRoot);
         Process process = pb.start();
 
         // Use threads to read and print output in real-time

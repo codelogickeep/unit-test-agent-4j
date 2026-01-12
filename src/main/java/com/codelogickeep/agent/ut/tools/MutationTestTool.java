@@ -197,8 +197,17 @@ public class MutationTestTool implements AgentTool {
         String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") 
                 ? "mvn.cmd" : "mvn";
 
+        // 构建完整的命令列表
+        List<String> fullCommand = new ArrayList<>();
+        fullCommand.add(mvnCmd);
+        for (String arg : command.split(" ")) {
+            if (!arg.trim().isEmpty()) {
+                fullCommand.add(arg.trim());
+            }
+        }
+
         ProcessBuilder pb = new ProcessBuilder();
-        pb.command(mvnCmd, command.split(" "));
+        pb.command(fullCommand);
         pb.directory(new File(projectPath));
         pb.redirectErrorStream(true);
 

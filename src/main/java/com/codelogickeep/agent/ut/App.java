@@ -175,6 +175,9 @@ public class App implements Callable<Integer> {
                     ((FileSystemTool) tool).setProjectRoot(projectRoot);
                     ((FileSystemTool) tool).setInteractive(config.getWorkflow().isInteractive());
                 }
+                if (tool instanceof MavenExecutorTool) {
+                    ((MavenExecutorTool) tool).setProjectRoot(projectRoot);
+                }
             }
 
             AgentOrchestrator orchestrator = new AgentOrchestrator(

@@ -65,7 +65,7 @@ public class CoverageFeedbackEngine {
         }
 
         // 3. 获取未覆盖的方法
-        String uncoveredMethods = coverageTool.getUncoveredMethodsCompact(projectPath, className);
+        String uncoveredMethods = coverageTool.getUncoveredMethodsCompact(projectPath, className, targetCoverage);
         List<String> uncoveredMethodList = parseUncoveredMethods(uncoveredMethods);
         resultBuilder.uncoveredMethods(uncoveredMethodList);
 
