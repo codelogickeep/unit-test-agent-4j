@@ -21,7 +21,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,9 +31,16 @@ import dev.langchain4j.agent.tool.Tool;
 public class KnowledgeBaseTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseTool.class);
 
+    // Supported file extensions for knowledge base
+    private static final List<String> SUPPORTED_EXTENSIONS = List.of(
+            ".java", ".md", ".txt", ".xml", ".yml", ".yaml", ".json"
+    );
+
     private EmbeddingStore<TextSegment> embeddingStore;
     private EmbeddingModel embeddingModel;
     private boolean isInitialized = false;
+    private int documentCount = 0;
+    private String indexedPath = null;
 
     // Use AppConfig for consistency, though MiniLm doesn't strictly need it unless
     // configured otherwise
@@ -59,27 +65,33 @@ public class KnowledgeBaseTool implements AgentTool {
 
             List<Document> documents = new ArrayList<>();
             if (Files.isDirectory(path)) {
-                // Filter for Java files only to learn coding style
+                // Load all supported file types
                 try (Stream<Path> stream = Files.find(path, 10,
-                        (p, attr) -> attr.isRegularFile() && p.toString().endsWith(".java"))) {
+                        (p, attr) -> attr.isRegularFile() && isSupportedFile(p.toString()))) {
 
-                    List<Path> javaFiles = stream.collect(Collectors.toList());
-                    if (javaFiles.isEmpty()) {
-                        log.warn("No .java files found in knowledge base directory: {}", knowledgeBasePath);
+                    List<Path> files = stream.collect(Collectors.toList());
+                    if (files.isEmpty()) {
+                        log.warn("No supported files found in knowledge base directory: {}", knowledgeBasePath);
                     }
 
-                    for (Path p : javaFiles) {
+                    for (Path p : files) {
                         try {
-                            documents
-                                    .add(FileSystemDocumentLoader.loadDocument(p.toString(), new TextDocumentParser()));
+                            Document doc = FileSystemDocumentLoader.loadDocument(p.toString(), new TextDocumentParser());
+                            // Add metadata for source tracking
+                            doc.metadata().put("source", p.getFileName().toString());
+                            doc.metadata().put("type", getFileType(p.toString()));
+                            documents.add(doc);
+                            log.debug("Loaded document: {} ({})", p.getFileName(), getFileType(p.toString()));
                         } catch (Exception e) {
                             log.warn("Failed to load document: {}", p, e);
                         }
                     }
                 }
             } else {
-                documents = Collections.singletonList(
-                        FileSystemDocumentLoader.loadDocument(path.toString(), new TextDocumentParser()));
+                Document doc = FileSystemDocumentLoader.loadDocument(path.toString(), new TextDocumentParser());
+                doc.metadata().put("source", path.getFileName().toString());
+                doc.metadata().put("type", getFileType(path.toString()));
+                documents.add(doc);
             }
 
             if (documents.isEmpty()) {
@@ -96,16 +108,60 @@ public class KnowledgeBaseTool implements AgentTool {
             ingestor.ingest(documents);
 
             this.isInitialized = true;
-            log.info("Knowledge base initialized with {} documents.", documents.size());
+            this.documentCount = documents.size();
+            this.indexedPath = knowledgeBasePath;
+            log.info("Knowledge base initialized with {} documents (Java: {}, Markdown: {}, Other: {})",
+                    documents.size(),
+                    documents.stream().filter(d -> "java".equals(d.metadata().getString("type"))).count(),
+                    documents.stream().filter(d -> "markdown".equals(d.metadata().getString("type"))).count(),
+                    documents.stream().filter(d -> "other".equals(d.metadata().getString("type"))).count()
+            );
 
         } catch (Exception e) {
             log.error("Failed to initialize knowledge base", e);
         }
     }
 
+    private boolean isSupportedFile(String path) {
+        String lowerPath = path.toLowerCase();
+        return SUPPORTED_EXTENSIONS.stream().anyMatch(lowerPath::endsWith);
+    }
+
+    private String getFileType(String path) {
+        String lowerPath = path.toLowerCase();
+        if (lowerPath.endsWith(".java")) return "java";
+        if (lowerPath.endsWith(".md")) return "markdown";
+        if (lowerPath.endsWith(".xml")) return "xml";
+        if (lowerPath.endsWith(".yml") || lowerPath.endsWith(".yaml")) return "yaml";
+        if (lowerPath.endsWith(".json")) return "json";
+        return "other";
+    }
+
+    @Tool("Get knowledge base status and statistics")
+    public String getKnowledgeBaseStatus() {
+        log.info("Tool Input - getKnowledgeBaseStatus");
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== Knowledge Base Status ===\n");
+        sb.append("Initialized: ").append(isInitialized).append("\n");
+        if (isInitialized) {
+            sb.append("Indexed Path: ").append(indexedPath).append("\n");
+            sb.append("Document Count: ").append(documentCount).append("\n");
+            sb.append("Supported Types: ").append(String.join(", ", SUPPORTED_EXTENSIONS)).append("\n");
+        } else {
+            sb.append("Status: Not initialized. Use -kb <path> to specify a knowledge base.\n");
+        }
+        sb.append("=============================\n");
+        String result = sb.toString();
+        log.info("Tool Output - getKnowledgeBaseStatus: initialized={}", isInitialized);
+        return result;
+    }
+
     @Tool("Search for information in the knowledge base. Use this to find existing unit test examples, coding guidelines, or project-specific patterns to ensure generated tests match the project style.")
-    public String searchKnowledge(@P("Search query or keywords") String query) {
-        log.info("Tool Input - searchKnowledge: query={}", query);
+    public String searchKnowledge(
+            @P("Search query or keywords") String query,
+            @P("Optional: filter by document type (java/markdown/xml/yaml/all). Default: all") String filterType
+    ) {
+        log.info("Tool Input - searchKnowledge: query={}, filterType={}", query, filterType);
         if (!isInitialized) {
             return fallbackSearch(query);
         }
@@ -113,26 +169,39 @@ public class KnowledgeBaseTool implements AgentTool {
         try {
             EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
                     .queryEmbedding(embeddingModel.embed(query).content())
-                    .maxResults(3)
+                    .maxResults(5) // Increased from 3 to 5
                     .build();
 
             EmbeddingSearchResult<TextSegment> searchResult = embeddingStore.search(request);
             List<EmbeddingMatch<TextSegment>> relevant = searchResult.matches();
 
             StringBuilder result = new StringBuilder();
-            result.append("Knowledge Base Results (Vector Search) for: ").append(query).append("\n\n");
+            result.append("Knowledge Base Results for: ").append(query).append("\n");
+            if (filterType != null && !"all".equalsIgnoreCase(filterType)) {
+                result.append("(Filtered by type: ").append(filterType).append(")\n");
+            }
+            result.append("\n");
 
             boolean found = false;
             for (EmbeddingMatch<TextSegment> match : relevant) {
-                if (match.score() > 0.6) {
+                if (match.score() > 0.5) { // Lowered threshold from 0.6 to 0.5
+                    // Apply type filter if specified
+                    String docType = match.embedded().metadata().getString("type");
+                    if (filterType != null && !"all".equalsIgnoreCase(filterType) && !filterType.equalsIgnoreCase(docType)) {
+                        continue;
+                    }
+                    
                     found = true;
-                    result.append("--- Relevance: ").append(String.format("%.2f", match.score())).append(" ---\n");
+                    String source = match.embedded().metadata().getString("source");
+                    result.append("--- Source: ").append(source != null ? source : "unknown");
+                    result.append(" | Type: ").append(docType != null ? docType : "unknown");
+                    result.append(" | Relevance: ").append(String.format("%.2f", match.score())).append(" ---\n");
                     result.append(match.embedded().text()).append("\n\n");
                 }
             }
 
             if (!found) {
-                String noResultsMsg = "No relevant information found in knowledge base (score < 0.6).";
+                String noResultsMsg = "No relevant information found in knowledge base (score < 0.5).";
                 log.info("Tool Output - searchKnowledge: {}", noResultsMsg);
                 return noResultsMsg;
             }
@@ -145,6 +214,23 @@ public class KnowledgeBaseTool implements AgentTool {
             log.error("Error searching knowledge base", e);
             return "Error searching knowledge base: " + e.getMessage();
         }
+    }
+
+    @Tool("Search for information in the knowledge base with default settings")
+    public String searchKnowledge(@P("Search query or keywords") String query) {
+        return searchKnowledge(query, "all");
+    }
+
+    @Tool("Search specifically for testing guidelines and conventions in Markdown documentation")
+    public String searchTestingGuidelines(@P("Topic to search for (e.g., 'assertion style', 'mock setup')") String topic) {
+        log.info("Tool Input - searchTestingGuidelines: topic={}", topic);
+        return searchKnowledge("testing guidelines " + topic + " best practices conventions", "markdown");
+    }
+
+    @Tool("Search for existing test code examples that match a pattern")
+    public String searchTestExamples(@P("What kind of test example to find (e.g., 'service layer test', 'mock repository')") String pattern) {
+        log.info("Tool Input - searchTestExamples: pattern={}", pattern);
+        return searchKnowledge("@Test " + pattern + " example unit test", "java");
     }
 
     private String fallbackSearch(String query) {
