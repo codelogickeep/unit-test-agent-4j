@@ -6,7 +6,7 @@
     
     <groupId>com.codelogickeep</groupId>
     <artifactId>unit-test-agent-4j</artifactId>
-    <version>0.1.0-LITE</version>
+    <version>0.8.0</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
