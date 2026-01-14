@@ -143,11 +143,16 @@ public class LspSyntaxCheckerTool implements AgentTool {
             List<Diagnostic> diagnostics = diagnosticsCache.getOrDefault(uri, Collections.emptyList());
             
             // 4. 格式化结果
-            return formatDiagnostics(filePath, diagnostics);
+            String result = formatDiagnostics(filePath, diagnostics);
+            log.info("Tool Output - checkSyntaxWithLsp: {}", 
+                    result.length() > 100 ? result.substring(0, 100) + "..." : result);
+            return result;
             
         } catch (Exception e) {
             log.error("LSP syntax check failed", e);
-            return "ERROR: LSP check failed: " + e.getMessage();
+            String result = "ERROR: LSP check failed: " + e.getMessage();
+            log.info("Tool Output - checkSyntaxWithLsp: {}", result);
+            return result;
         }
     }
 
@@ -187,11 +192,16 @@ public class LspSyntaxCheckerTool implements AgentTool {
             // 清理临时文件
             Files.deleteIfExists(tempFile);
             
-            return formatDiagnostics(targetPath, diagnostics);
+            String result = formatDiagnostics(targetPath, diagnostics);
+            log.info("Tool Output - checkContentWithLsp: {}", 
+                    result.length() > 100 ? result.substring(0, 100) + "..." : result);
+            return result;
             
         } catch (Exception e) {
             log.error("LSP content check failed", e);
-            return "ERROR: LSP check failed: " + e.getMessage();
+            String result = "ERROR: LSP check failed: " + e.getMessage();
+            log.info("Tool Output - checkContentWithLsp: {}", result);
+            return result;
         }
     }
 
