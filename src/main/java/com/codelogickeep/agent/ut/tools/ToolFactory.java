@@ -12,13 +12,52 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class ToolFactory {
     private static final Logger log = LoggerFactory.getLogger(ToolFactory.class);
 
+    /**
+     * 加载所有工具（原有方法，保持兼容）
+     */
     public static List<Object> loadAndWrapTools(AppConfig appConfig, String knowledgeBasePath) {
+        return loadAndWrapTools(appConfig, knowledgeBasePath, null);
+    }
+
+    /**
+     * 根据 skill 名称加载工具
+     * @param appConfig 应用配置
+     * @param knowledgeBasePath 知识库路径
+     * @param skillName skill 名称，null 或空表示加载全部工具
+     * @return 工具列表
+     */
+    public static List<Object> loadAndWrapTools(AppConfig appConfig, String knowledgeBasePath, String skillName) {
+        List<Object> allTools = loadAllTools(appConfig, knowledgeBasePath);
+        
+        // 如果指定了 skill，则过滤工具
+        if (skillName != null && !skillName.isEmpty()) {
+            List<Object> filteredTools = filterToolsBySkill(allTools, appConfig, skillName);
+            if (!filteredTools.isEmpty()) {
+                log.info("Using skill '{}' with {} tools (filtered from {})", 
+                        skillName, filteredTools.size(), allTools.size());
+                printToolSpecifications(filteredTools);
+                return filteredTools;
+            } else {
+                log.warn("Skill '{}' not found or has no tools defined, using all tools", skillName);
+            }
+        }
+        
+        printToolSpecifications(allTools);
+        return allTools;
+    }
+
+    /**
+     * 加载所有可用工具（内部方法）
+     */
+    private static List<Object> loadAllTools(AppConfig appConfig, String knowledgeBasePath) {
         List<Object> tools = new ArrayList<>();
         
         // Scan for implementations of AgentTool
@@ -63,8 +102,86 @@ public class ToolFactory {
             }
         }
         
-        printToolSpecifications(tools);
         return tools;
+    }
+
+    /**
+     * 根据 skill 配置过滤工具
+     * @param allTools 所有工具
+     * @param appConfig 配置
+     * @param skillName skill 名称
+     * @return 过滤后的工具列表
+     */
+    public static List<Object> filterToolsBySkill(List<Object> allTools, AppConfig appConfig, String skillName) {
+        if (appConfig.getSkills() == null || appConfig.getSkills().isEmpty()) {
+            return allTools;
+        }
+        
+        // 查找匹配的 skill 配置
+        AppConfig.SkillConfig skillConfig = appConfig.getSkills().stream()
+                .filter(s -> skillName.equals(s.getName()))
+                .findFirst()
+                .orElse(null);
+        
+        if (skillConfig == null) {
+            log.warn("Skill '{}' not found in configuration", skillName);
+            return allTools;
+        }
+        
+        // 如果 tools 为空或 null，返回全部工具
+        List<String> toolNames = skillConfig.getTools();
+        if (toolNames == null || toolNames.isEmpty()) {
+            log.info("Skill '{}' has no specific tools, using all tools", skillName);
+            return allTools;
+        }
+        
+        // 过滤工具
+        Set<String> toolNameSet = new HashSet<>(toolNames);
+        List<Object> filteredTools = allTools.stream()
+                .filter(tool -> toolNameSet.contains(tool.getClass().getSimpleName()))
+                .collect(Collectors.toList());
+        
+        log.info("Skill '{}': {} tools requested, {} tools matched", 
+                skillName, toolNames.size(), filteredTools.size());
+        
+        // 警告未找到的工具
+        Set<String> foundToolNames = filteredTools.stream()
+                .map(t -> t.getClass().getSimpleName())
+                .collect(Collectors.toSet());
+        toolNames.stream()
+                .filter(name -> !foundToolNames.contains(name))
+                .forEach(name -> log.warn("Tool '{}' specified in skill '{}' was not found", name, skillName));
+        
+        return filteredTools;
+    }
+
+    /**
+     * 按工具名称列表过滤工具
+     * @param allTools 所有工具
+     * @param toolNames 工具类名列表
+     * @return 过滤后的工具列表
+     */
+    public static List<Object> filterToolsByNames(List<Object> allTools, List<String> toolNames) {
+        if (toolNames == null || toolNames.isEmpty()) {
+            return allTools;
+        }
+        
+        Set<String> toolNameSet = new HashSet<>(toolNames);
+        return allTools.stream()
+                .filter(tool -> toolNameSet.contains(tool.getClass().getSimpleName()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取所有可用的 skill 名称
+     */
+    public static List<String> getAvailableSkillNames(AppConfig appConfig) {
+        if (appConfig.getSkills() == null) {
+            return List.of();
+        }
+        return appConfig.getSkills().stream()
+                .map(AppConfig.SkillConfig::getName)
+                .collect(Collectors.toList());
     }
 
     private static void printToolSpecifications(List<Object> tools) {

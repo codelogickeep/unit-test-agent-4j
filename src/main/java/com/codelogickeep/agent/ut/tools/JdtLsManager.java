@@ -26,14 +26,13 @@ public class JdtLsManager {
     // JDT LS 下载配置
     // 版本 1.44.0 支持 JDK 21+
     private static final String JDTLS_VERSION = "1.50.0";
-    private static final String JDTLS_DOWNLOAD_URL = 
-            "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202509041425.tar.gz";
+    private static final String JDTLS_DOWNLOAD_URL = "https://download.eclipse.org/jdtls/milestones/1.50.0/jdt-language-server-1.50.0-202509041425.tar.gz";
     private static final String JDTLS_FILENAME = "jdt-language-server-1.50.0.tar.gz";
 
     // 本地目录名
     private static final String JDTLS_DIR_NAME = "jdtls";
 
-    private final Path agentDir;  // Agent JAR 所在目录
+    private final Path agentDir; // Agent JAR 所在目录
     private final Path jdtlsDir;
     private Path jdtlsLauncher;
 
@@ -43,7 +42,7 @@ public class JdtLsManager {
         this.jdtlsDir = agentDir.resolve(JDTLS_DIR_NAME);
         log.info("JDT LS Manager initialized. Agent dir: {}, JDTLS dir: {}", agentDir, jdtlsDir);
     }
-    
+
     /**
      * 获取 Agent JAR 所在目录
      */
@@ -52,7 +51,7 @@ public class JdtLsManager {
             // 获取当前类所在的 JAR 文件路径
             Path jarPath = Paths.get(JdtLsManager.class.getProtectionDomain()
                     .getCodeSource().getLocation().toURI());
-            
+
             // 如果是 JAR 文件，返回其父目录
             if (Files.isRegularFile(jarPath)) {
                 return jarPath.getParent();
@@ -72,7 +71,7 @@ public class JdtLsManager {
      */
     public boolean ensureJdtLsAvailable() {
         log.info("Checking JDT Language Server availability...");
-        
+
         // 1. 检查系统已安装的 JDTLS
         String systemJdtls = findSystemJdtls();
         if (systemJdtls != null) {
@@ -80,13 +79,13 @@ public class JdtLsManager {
             this.jdtlsLauncher = Paths.get(systemJdtls);
             return true;
         }
-        
+
         // 2. 检查缓存的 JDTLS
         if (isCachedJdtlsValid()) {
             log.info("Found cached JDT LS: {}", jdtlsLauncher);
             return true;
         }
-        
+
         // 3. 下载 JDTLS
         log.info("JDT LS not found. Downloading...");
         return downloadAndExtractJdtls();
@@ -94,39 +93,95 @@ public class JdtLsManager {
 
     /**
      * 获取 JDT LS 启动命令
+     * 直接使用 Java 命令启动，绕过 Python 启动脚本
      */
     public List<String> getJdtlsCommand(String projectPath, String workspaceDir) {
         if (jdtlsLauncher == null) {
             throw new IllegalStateException("JDT LS not initialized. Call ensureJdtLsAvailable() first.");
         }
-        
+
         List<String> command = new ArrayList<>();
-        
-        String os = System.getProperty("os.name").toLowerCase();
-        
-        if (os.contains("win")) {
-            // Windows
-            if (jdtlsLauncher.toString().endsWith(".bat") || jdtlsLauncher.toString().endsWith(".cmd")) {
-                command.add(jdtlsLauncher.toString());
-            } else {
-                command.add("java");
-                command.addAll(getJavaArgs(workspaceDir));
-            }
-        } else {
-            // Linux/macOS
-            if (Files.isExecutable(jdtlsLauncher)) {
-                command.add(jdtlsLauncher.toString());
-            } else {
-                command.add("java");
-                command.addAll(getJavaArgs(workspaceDir));
-            }
+
+        // 始终使用 Java 直接启动，绕过 Python 脚本
+        // 这样可以避免 Python 版本和输出缓冲问题
+        Path launcherJar = findEquinoxLauncher();
+        if (launcherJar == null) {
+            throw new IllegalStateException("Cannot find equinox launcher jar in " + jdtlsDir);
         }
-        
-        // 添加工作空间参数
+
+        // 使用 JAVA_HOME 或默认 java
+        String javaPath = getJavaExecutable();
+        command.add(javaPath);
+
+        // JVM 参数
+        command.add("-Declipse.application=org.eclipse.jdt.ls.core.id1");
+        command.add("-Dosgi.bundles.defaultStartLevel=4");
+        command.add("-Declipse.product=org.eclipse.jdt.ls.core.product");
+        command.add("-Dlog.level=ALL");
+        command.add("-Xmx1G");
+        command.add("--add-modules=ALL-SYSTEM");
+        command.add("--add-opens");
+        command.add("java.base/java.util=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.lang=ALL-UNNAMED");
+
+        // Launcher jar
+        command.add("-jar");
+        command.add(launcherJar.toString());
+
+        // 配置目录
+        Path configDir = jdtlsDir.resolve("config_" + getConfigSuffix());
+        if (Files.exists(configDir)) {
+            command.add("-configuration");
+            command.add(configDir.toString());
+        }
+
+        // 工作空间参数
         command.add("-data");
         command.add(workspaceDir);
-        
+
         return command;
+    }
+
+    /**
+     * 查找 equinox launcher jar
+     */
+    private Path findEquinoxLauncher() {
+        Path pluginsDir = jdtlsDir.resolve("plugins");
+
+        // 先检查 mason-registry 风格的打包
+        Path simpleJar = pluginsDir.resolve("org.eclipse.equinox.launcher.jar");
+        if (Files.exists(simpleJar)) {
+            return simpleJar;
+        }
+
+        // 查找版本化的 launcher jar
+        try {
+            return Files.list(pluginsDir)
+                    .filter(p -> p.getFileName().toString().startsWith("org.eclipse.equinox.launcher_"))
+                    .filter(p -> p.toString().endsWith(".jar"))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            log.warn("Error finding launcher jar", e);
+            return null;
+        }
+    }
+
+    /**
+     * 获取 Java 可执行文件路径
+     */
+    private String getJavaExecutable() {
+        String javaHome = System.getenv("JAVA_HOME");
+        if (javaHome != null) {
+            String os = System.getProperty("os.name").toLowerCase();
+            String ext = os.contains("win") ? ".exe" : "";
+            Path javaPath = Paths.get(javaHome, "bin", "java" + ext);
+            if (Files.exists(javaPath)) {
+                return javaPath.toString();
+            }
+        }
+        return "java";
     }
 
     /**
@@ -135,19 +190,36 @@ public class JdtLsManager {
     public Process startJdtls(String projectPath) throws IOException {
         // 创建工作空间目录
         String workspaceDir = createWorkspaceDir(projectPath);
-        
+
         List<String> command = getJdtlsCommand(projectPath, workspaceDir);
         log.info("Starting JDT LS with command: {}", String.join(" ", command));
-        
+
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(new File(projectPath));
+        // 合并 stderr 到 stdout，这样 LSP 客户端可以通过 stdin/stdout 通信
+        // JDT LS 通过 stdin/stdout 进行 LSP 通信
         pb.redirectErrorStream(false);
-        
-        // 设置环境变量
-        pb.environment().put("CLIENT_HOST", "127.0.0.1");
-        pb.environment().put("CLIENT_PORT", "0");
-        
-        return pb.start();
+
+        // 不需要这些环境变量，JDT LS 使用 stdin/stdout
+        // pb.environment().put("CLIENT_HOST", "127.0.0.1");
+        // pb.environment().put("CLIENT_PORT", "0");
+
+        Process process = pb.start();
+
+        // 异步读取 stderr 以便调试
+        new Thread(() -> {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.debug("JDT LS stderr: {}", line);
+                }
+            } catch (Exception e) {
+                log.debug("Error reading stderr", e);
+            }
+        }, "jdtls-stderr-reader").start();
+
+        return process;
     }
 
     /**
@@ -158,7 +230,7 @@ public class JdtLsManager {
         sb.append("JDT Language Server Status:\n");
         sb.append("  Preferred Version: ").append(JDTLS_VERSION).append(" (JDK 21+ compatible)\n");
         sb.append("  Install Dir: ").append(agentDir).append("\n");
-        
+
         if (jdtlsLauncher != null && Files.exists(jdtlsLauncher)) {
             sb.append("  Status: AVAILABLE\n");
             sb.append("  Location: ").append(jdtlsLauncher).append("\n");
@@ -176,7 +248,7 @@ public class JdtLsManager {
                 sb.append("  Supported Versions: 1.38.0, 1.37.0, 1.36.0, 1.31.0\n");
             }
         }
-        
+
         return sb.toString();
     }
 
@@ -188,31 +260,31 @@ public class JdtLsManager {
         if (jdtlsPath != null && Files.exists(Paths.get(jdtlsPath))) {
             return jdtlsPath;
         }
-        
+
         // 检查 PATH 中的命令
-        String[] commands = {"jdtls", "jdt-language-server"};
+        String[] commands = { "jdtls", "jdt-language-server" };
         for (String cmd : commands) {
             if (isCommandAvailable(cmd)) {
                 return cmd;
             }
         }
-        
+
         // 检查常见安装位置
         String[] commonPaths = {
-            "/usr/local/bin/jdtls",
-            "/opt/homebrew/bin/jdtls",
-            System.getProperty("user.home") + "/.local/share/nvim/mason/bin/jdtls",
-            System.getProperty("user.home") + "/eclipse.jdt.ls/bin/jdtls",
-            "C:\\Program Files\\jdtls\\bin\\jdtls.bat",
-            "C:\\jdtls\\bin\\jdtls.bat"
+                "/usr/local/bin/jdtls",
+                "/opt/homebrew/bin/jdtls",
+                System.getProperty("user.home") + "/.local/share/nvim/mason/bin/jdtls",
+                System.getProperty("user.home") + "/eclipse.jdt.ls/bin/jdtls",
+                "C:\\Program Files\\jdtls\\bin\\jdtls.bat",
+                "C:\\jdtls\\bin\\jdtls.bat"
         };
-        
+
         for (String path : commonPaths) {
             if (Files.exists(Paths.get(path))) {
                 return path;
             }
         }
-        
+
         return null;
     }
 
@@ -245,22 +317,24 @@ public class JdtLsManager {
         if (!Files.exists(jdtlsDir)) {
             return null;
         }
-        
+
         // 查找 bin/jdtls 或 jdt-language-server-*.jar
         String os = System.getProperty("os.name").toLowerCase();
-        
+
         // 查找启动脚本
         Path binDir = jdtlsDir.resolve("bin");
         if (Files.exists(binDir)) {
             if (os.contains("win")) {
                 Path batFile = binDir.resolve("jdtls.bat");
-                if (Files.exists(batFile)) return batFile;
+                if (Files.exists(batFile))
+                    return batFile;
             } else {
                 Path shFile = binDir.resolve("jdtls");
-                if (Files.exists(shFile)) return shFile;
+                if (Files.exists(shFile))
+                    return shFile;
             }
         }
-        
+
         // 查找 launcher jar
         try {
             Path pluginsDir = jdtlsDir.resolve("plugins");
@@ -274,7 +348,7 @@ public class JdtLsManager {
         } catch (IOException e) {
             log.warn("Error finding launcher jar", e);
         }
-        
+
         return null;
     }
 
@@ -282,23 +356,23 @@ public class JdtLsManager {
         try {
             // 创建安装目录
             Files.createDirectories(jdtlsDir);
-            
+
             Path downloadFile = agentDir.resolve(JDTLS_FILENAME);
-            
+
             log.info("Downloading JDT LS {} (supports JDK 21+)...", JDTLS_VERSION);
             log.info("URL: {}", JDTLS_DOWNLOAD_URL);
-            
+
             if (downloadFile(JDTLS_DOWNLOAD_URL, downloadFile)) {
                 // 等待文件句柄完全释放（Windows 需要）
                 Thread.sleep(500);
-                
+
                 // 解压
                 log.info("Extracting JDT LS to: {}", jdtlsDir);
                 extractTarGz(downloadFile, jdtlsDir);
-                
+
                 // 清理下载文件
                 Files.deleteIfExists(downloadFile);
-                
+
                 // 验证
                 if (isCachedJdtlsValid()) {
                     log.info("JDT LS {} installed successfully: {}", JDTLS_VERSION, jdtlsLauncher);
@@ -308,10 +382,10 @@ public class JdtLsManager {
                     return false;
                 }
             }
-            
+
             log.error("Failed to download JDT LS");
             return false;
-            
+
         } catch (Exception e) {
             log.error("Failed to download/extract JDT LS", e);
             return false;
@@ -325,30 +399,30 @@ public class JdtLsManager {
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(30000);
-            conn.setReadTimeout(120000);  // 增加读取超时
+            conn.setReadTimeout(120000); // 增加读取超时
             conn.setRequestProperty("User-Agent", "unit-test-agent-4j");
-            
+
             int responseCode = conn.getResponseCode();
             if (responseCode != 200) {
                 log.warn("Download failed with status: {}", responseCode);
                 return false;
             }
-            
+
             long totalSize = conn.getContentLengthLong();
             log.info("Downloading {} ({} MB)...", JDTLS_FILENAME, totalSize / 1024 / 1024);
-            
+
             try (InputStream in = conn.getInputStream();
-                 OutputStream out = Files.newOutputStream(destination)) {
-                
+                    OutputStream out = Files.newOutputStream(destination)) {
+
                 byte[] buffer = new byte[8192];
                 long downloaded = 0;
                 int bytesRead;
                 int lastProgress = 0;
-                
+
                 while ((bytesRead = in.read(buffer)) != -1) {
                     out.write(buffer, 0, bytesRead);
                     downloaded += bytesRead;
-                    
+
                     if (totalSize > 0) {
                         int progress = (int) (downloaded * 100 / totalSize);
                         if (progress >= lastProgress + 10) {
@@ -359,10 +433,10 @@ public class JdtLsManager {
                 }
                 out.flush();
             }
-            
+
             log.info("Download completed: {}", destination);
             return true;
-            
+
         } catch (Exception e) {
             log.warn("Download failed: {}", e.getMessage());
             return false;
@@ -376,7 +450,7 @@ public class JdtLsManager {
     private void extractTarGz(Path tarGzFile, Path destDir) throws IOException {
         // 使用系统命令解压（更可靠）
         String os = System.getProperty("os.name").toLowerCase();
-        
+
         ProcessBuilder pb;
         if (os.contains("win")) {
             // Windows - 使用 tar（Windows 10+ 内置）
@@ -385,10 +459,10 @@ public class JdtLsManager {
             // Linux/macOS
             pb = new ProcessBuilder("tar", "-xzf", tarGzFile.toString(), "-C", destDir.toString());
         }
-        
+
         pb.redirectErrorStream(true);
         Process process = pb.start();
-        
+
         // 读取输出
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
@@ -396,7 +470,7 @@ public class JdtLsManager {
                 log.debug("tar: {}", line);
             }
         }
-        
+
         try {
             int exitCode = process.waitFor();
             if (exitCode != 0) {
@@ -410,21 +484,21 @@ public class JdtLsManager {
 
     private List<String> getJavaArgs(String workspaceDir) {
         List<String> args = new ArrayList<>();
-        
+
         // 查找 launcher jar
         Path launcherJar = jdtlsLauncher;
         if (launcherJar != null && launcherJar.toString().endsWith(".jar")) {
             args.add("-jar");
             args.add(launcherJar.toString());
         }
-        
+
         // 配置目录
         Path configDir = jdtlsDir.resolve("config_" + getConfigSuffix());
         if (Files.exists(configDir)) {
             args.add("-configuration");
             args.add(configDir.toString());
         }
-        
+
         return args;
     }
 

@@ -264,6 +264,37 @@ utagent \
   -i
 ```
 
+### Skill 动态工具选择
+
+通过仅加载相关工具来减少 Token 消耗（约 60-70%）。
+
+```bash
+# 使用 analysis skill（6 个工具，而非 15 个）
+utagent \
+  --target path/to/MyService.java \
+  --skill analysis
+
+# 使用 generation skill 生成测试
+utagent \
+  --target path/to/MyService.java \
+  --skill generation
+
+# 使用 verification skill 运行测试
+utagent \
+  --target path/to/MyService.java \
+  --skill verification
+```
+
+**内置 Skills:**
+
+| Skill | 说明 | 工具数 | Token 节省 |
+|-------|------|--------|------------|
+| `analysis` | 代码分析阶段 | 6 | ~60% |
+| `generation` | 测试生成阶段 | 5 | ~65% |
+| `verification` | 测试验证阶段 | 5 | ~65% |
+| `repair` | 修复失败测试 | 5 | ~65% |
+| `full` | 全部工具（默认） | 15 | 基准 |
+
 **交互提示示例：**
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -331,6 +362,12 @@ utagent \
 | 选项 | 简写 | 说明 |
 |------|------|------|
 | `--interactive` | `-i` | 启用交互确认模式 |
+
+### Skill 选项（动态工具选择）
+
+| 选项 | 说明 | 示例 |
+|------|------|------|
+| `--skill` | 使用指定 skill 的工具子集 | `analysis`、`generation`、`verification` |
 
 ## 配置说明
 
@@ -431,6 +468,31 @@ dependencies:
 prompts:
   # 系统提示词模板路径（文件或 classpath 资源）
   system: "prompts/system-prompt.st"
+
+# ═══════════════════════════════════════════════════════════════════
+# Skills 配置（动态工具选择）
+# 通过仅加载相关工具减少约 60-70% 的 Token 消耗
+# ═══════════════════════════════════════════════════════════════════
+skills:
+  - name: "analysis"
+    description: "代码分析阶段"
+    tools: [CodeAnalyzerTool, FileSystemTool, BoundaryAnalyzerTool, StyleAnalyzerTool, ProjectScannerTool, TestDiscoveryTool]
+  - name: "generation"
+    description: "测试生成阶段"
+    tools: [FileSystemTool, DirectoryTool, KnowledgeBaseTool, SyntaxCheckerTool, CodeAnalyzerTool]
+  - name: "verification"
+    description: "测试验证阶段"
+    tools: [MavenExecutorTool, TestReportTool, CoverageTool, FileSystemTool, MutationTestTool]
+  - name: "repair"
+    description: "修复阶段"
+    tools: [FileSystemTool, TestReportTool, CodeAnalyzerTool, SyntaxCheckerTool, MavenExecutorTool]
+  - name: "full"
+    description: "完整工具集（默认）"
+    tools: []  # 空数组表示使用全部工具
+
+# 在 workflow 中设置默认 skill:
+# workflow:
+#   default-skill: "analysis"
 ```
 
 ### 环境变量

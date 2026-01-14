@@ -1,9 +1,12 @@
 package com.codelogickeep.agent.ut;
+
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
 import com.codelogickeep.agent.ut.engine.LlmClient;
 import com.codelogickeep.agent.ut.tools.FileSystemTool;
+import com.codelogickeep.agent.ut.tools.LspSyntaxCheckerTool;
 import com.codelogickeep.agent.ut.tools.MavenExecutorTool;
+import com.codelogickeep.agent.ut.tools.SyntaxCheckerTool;
 import com.codelogickeep.agent.ut.tools.ToolFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -22,58 +25,74 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-@Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "0.1.0",
-        description = "AI Agent for generating JUnit 5 tests.",
-        subcommands = {App.ConfigCommand.class})
+@Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "0.1.0", description = "AI Agent for generating JUnit 5 tests.", subcommands = {
+        App.ConfigCommand.class })
 public class App implements Callable<Integer> {
 
-    @Option(names = {"-t", "--target"}, description = "Target Java file to test")
+    @Option(names = { "-t", "--target" }, description = "Target Java file to test")
     private String targetFile;
 
-    @Option(names = {"-c", "--config"}, description = "Path to agent configuration file (defaults to config.yml or agent.yml)")
+    @Option(names = { "-c",
+            "--config" }, description = "Path to agent configuration file (defaults to config.yml or agent.yml)")
     private String configPath;
 
-    @Option(names = {"--check-env"}, description = "Check environment configuration (Maven, LLM, Permissions) and exit")
+    @Option(names = {
+            "--check-env" }, description = "Check environment configuration (Maven, LLM, Permissions) and exit")
     private boolean checkEnv;
 
-    @Option(names = {"-kb", "--knowledge-base"}, description = "Path to existing unit tests (directory or file) to learn coding style and patterns.")
+    @Option(names = { "-kb",
+            "--knowledge-base" }, description = "Path to existing unit tests (directory or file) to learn coding style and patterns.")
     private String knowledgeBasePath;
 
-    @Option(names = {"--protocol"}, description = "Override LLM Protocol for this run (openai, anthropic, gemini). Does not save to config.")
+    @Option(names = {
+            "--protocol" }, description = "Override LLM Protocol for this run (openai, anthropic, gemini). Does not save to config.")
     private String protocol;
 
-    @Option(names = {"--api-key"}, description = "Override LLM API Key for this run. Does not save to config unless --save is used.")
+    @Option(names = {
+            "--api-key" }, description = "Override LLM API Key for this run. Does not save to config unless --save is used.")
     private String apiKey;
 
-    @Option(names = {"--base-url"}, description = "Override LLM Base URL for this run. Does not save to config unless --save is used.")
+    @Option(names = {
+            "--base-url" }, description = "Override LLM Base URL for this run. Does not save to config unless --save is used.")
     private String baseUrl;
 
-    @Option(names = {"--model"}, description = "Override LLM Model Name for this run. Does not save to config unless --save is used.")
+    @Option(names = {
+            "--model" }, description = "Override LLM Model Name for this run. Does not save to config unless --save is used.")
     private String modelName;
 
-    @Option(names = {"--temperature"}, description = "Override LLM Temperature for this run. Does not save to config.")
+    @Option(names = {
+            "--temperature" }, description = "Override LLM Temperature for this run. Does not save to config.")
     private Double temperature;
 
-    @Option(names = {"--max-retries"}, description = "Override Max Retries for this run. Does not save to config.")
+    @Option(names = { "--max-retries" }, description = "Override Max Retries for this run. Does not save to config.")
     private Integer maxRetries;
 
-    @Option(names = {"--save"}, description = "Save the overridden configuration (API Key, Base URL, Model) to agent.yml for future runs.")
+    @Option(names = {
+            "--save" }, description = "Save the overridden configuration (API Key, Base URL, Model) to agent.yml for future runs.")
     private boolean saveConfig;
 
-    @Option(names = {"-i", "--interactive"}, description = "Enable interactive mode: confirm before writing test files.")
+    @Option(names = { "-i",
+            "--interactive" }, description = "Enable interactive mode: confirm before writing test files.")
     private boolean interactive;
 
-    @Option(names = {"-p", "--project"}, description = "Project directory for batch mode: scan and generate tests for all uncovered classes.")
+    @Option(names = { "-p",
+            "--project" }, description = "Project directory for batch mode: scan and generate tests for all uncovered classes.")
     private String projectDir;
 
-    @Option(names = {"--exclude"}, description = "Exclude patterns for batch mode (comma-separated globs, e.g., '**/dto/*.java,**/vo/*.java').")
+    @Option(names = {
+            "--exclude" }, description = "Exclude patterns for batch mode (comma-separated globs, e.g., '**/dto/*.java,**/vo/*.java').")
     private String excludePatterns;
 
-    @Option(names = {"--dry-run"}, description = "Batch mode: analyze only, print report without generating tests.")
+    @Option(names = { "--dry-run" }, description = "Batch mode: analyze only, print report without generating tests.")
     private boolean dryRun;
 
-    @Option(names = {"--threshold"}, description = "Coverage threshold (0-100). Methods below this threshold will be targeted. Default: 80.")
+    @Option(names = {
+            "--threshold" }, description = "Coverage threshold (0-100). Methods below this threshold will be targeted. Default: 80.")
     private Integer coverageThreshold;
+
+    @Option(names = {
+            "--skill" }, description = "Use specific skill for tool selection (e.g., analysis, generation, verification). Default: use all tools.")
+    private String skillName;
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -110,7 +129,7 @@ public class App implements Callable<Integer> {
         if (temperature != null) {
             config.getLlm().setTemperature(temperature);
         }
-        
+
         if (config.getWorkflow() == null) {
             config.setWorkflow(new AppConfig.WorkflowConfig());
         }
@@ -136,14 +155,16 @@ public class App implements Callable<Integer> {
             needsSave = true;
         }
 
-        // 1.2 Save Config if requested or if defaults were applied to a non-existent config
+        // 1.2 Save Config if requested or if defaults were applied to a non-existent
+        // config
         if (saveConfig || (needsSave && !new File(getJarDir(), "agent.yml").exists())) {
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
             File configFile = new File(getJarDir(), "agent.yml");
             try {
                 mapper.writeValue(configFile, config);
-                System.out.println(">>> Configuration updated with defaults and saved to " + configFile.getAbsolutePath());
+                System.out.println(
+                        ">>> Configuration updated with defaults and saved to " + configFile.getAbsolutePath());
             } catch (IOException e) {
                 System.err.println("Warning: Failed to save configuration: " + e.getMessage());
             }
@@ -154,17 +175,22 @@ public class App implements Callable<Integer> {
             com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
             return 0;
         }
-        
+
         // 2. Setup Context
         // Governance context removed.
 
         try {
             // 3. Initialize Tools Dynamically
-            List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath);
+            // 确定要使用的 skill（CLI 优先，然后是配置文件）
+            String activeSkill = skillName;
+            if (activeSkill == null && config.getWorkflow() != null) {
+                activeSkill = config.getWorkflow().getDefaultSkill();
+            }
+            List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath, activeSkill);
 
             // 4. Initialize AI Engine
             LlmClient llmClient = new LlmClient(config.getLlm());
-            
+
             // Detect Project Root (Directory containing pom.xml near target file)
             // If --project is specified, use it as the project root
             String projectRoot;
@@ -173,10 +199,14 @@ public class App implements Callable<Integer> {
             } else {
                 projectRoot = detectProjectRoot(targetFile);
             }
-            
+
             // Perform Project Audit at startup
             com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
-            
+
+            // 第一遍：设置基本属性和找到关键工具
+            SyntaxCheckerTool syntaxCheckerTool = null;
+            LspSyntaxCheckerTool lspSyntaxCheckerTool = null;
+
             for (Object tool : tools) {
                 if (tool instanceof FileSystemTool) {
                     ((FileSystemTool) tool).setProjectRoot(projectRoot);
@@ -185,13 +215,46 @@ public class App implements Callable<Integer> {
                 if (tool instanceof MavenExecutorTool) {
                     ((MavenExecutorTool) tool).setProjectRoot(projectRoot);
                 }
+                if (tool instanceof SyntaxCheckerTool && !(tool instanceof LspSyntaxCheckerTool)) {
+                    syntaxCheckerTool = (SyntaxCheckerTool) tool;
+                    syntaxCheckerTool.setProjectRoot(projectRoot);
+                }
+                if (tool instanceof LspSyntaxCheckerTool) {
+                    lspSyntaxCheckerTool = (LspSyntaxCheckerTool) tool;
+                }
+            }
+
+            // 当 use-lsp: true 时，自动初始化 LSP 服务
+            boolean lspInitialized = false;
+            if (config.getWorkflow().isUseLsp() && lspSyntaxCheckerTool != null) {
+                lspSyntaxCheckerTool.setProjectRoot(projectRoot);
+                System.out.println(">>> Initializing LSP server for project: " + projectRoot);
+                try {
+                    String lspResult = lspSyntaxCheckerTool.initializeLsp(projectRoot);
+                    System.out.println(">>> LSP: " + lspResult);
+                    if (lspResult.startsWith("ERROR")) {
+                        System.out.println(
+                                ">>> Warning: LSP initialization failed, falling back to JavaParser for syntax checks");
+                    } else {
+                        lspInitialized = true;
+                    }
+                } catch (Exception e) {
+                    System.out.println(">>> Warning: LSP initialization failed: " + e.getMessage());
+                    System.out.println(">>> Falling back to JavaParser for syntax checks");
+                }
+            }
+
+            // 如果 LSP 初始化成功，设置 SyntaxCheckerTool 的 LSP 委托
+            // 这样当 LLM 调用 checkSyntax 时，会自动使用 LSP 进行更完整的检查
+            if (lspInitialized && syntaxCheckerTool != null && lspSyntaxCheckerTool != null) {
+                syntaxCheckerTool.setLspDelegate(lspSyntaxCheckerTool, true);
+                System.out.println(">>> SyntaxCheckerTool will use LSP for syntax checks");
             }
 
             AgentOrchestrator orchestrator = new AgentOrchestrator(
                     config,
                     llmClient.createStreamingModel(),
-                    tools
-            );
+                    tools);
 
             // 5. Run Agent
             if (projectDir != null && targetFile != null) {
@@ -214,7 +277,7 @@ public class App implements Callable<Integer> {
                 System.err.println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
                 return 1;
             }
-            
+
             return 0;
         } catch (IllegalArgumentException e) {
             System.err.println("Configuration Error: " + e.getMessage());
@@ -229,10 +292,11 @@ public class App implements Callable<Integer> {
     }
 
     private String detectProjectRoot(String targetFilePath) {
-        if (targetFilePath == null) return ".";
+        if (targetFilePath == null)
+            return ".";
         File file = new File(targetFilePath).getAbsoluteFile();
         File current = file.isDirectory() ? file : file.getParentFile();
-        
+
         while (current != null) {
             if (new File(current, "pom.xml").exists()) {
                 return current.getAbsolutePath();
@@ -295,7 +359,8 @@ public class App implements Callable<Integer> {
                 mapper.readerForUpdating(config).readValue(file);
                 System.out.println(">>> Merged configuration from " + file.getAbsolutePath());
             } catch (IOException e) {
-                System.err.println("Warning: Failed to merge config from " + file.getAbsolutePath() + ": " + e.getMessage());
+                System.err.println(
+                        "Warning: Failed to merge config from " + file.getAbsolutePath() + ": " + e.getMessage());
             }
         }
     }
@@ -304,15 +369,15 @@ public class App implements Callable<Integer> {
         if (value == null || !value.contains("${env:")) {
             return value;
         }
-        
-        // Simple regex-less replacement for multiple env vars if needed, 
+
+        // Simple regex-less replacement for multiple env vars if needed,
         // but current logic assumes the whole string might be an env var placeholder
         if (value.startsWith("${env:") && value.endsWith("}")) {
             String envVar = value.substring(6, value.length() - 1);
             String envValue = System.getenv(envVar);
             return envValue != null ? envValue : value;
         }
-        
+
         return value;
     }
 
@@ -337,17 +402,18 @@ public class App implements Callable<Integer> {
 
             System.out.println(">>> Found " + tasks.size() + " classes needing tests:");
             for (TestTask t : tasks) {
-                System.out.println("    - " + t.getSourceFilePath() + " (" + t.getUncoveredMethods().size() + " uncovered methods)");
+                System.out.println("    - " + t.getSourceFilePath() + " (" + t.getUncoveredMethods().size()
+                        + " uncovered methods)");
             }
 
             // Process each class
             int processed = 0;
             for (TestTask task : tasks) {
-                System.out.println("\n>>> Processing [" + (++processed) + "/" + tasks.size() + "]: " + task.getSourceFilePath());
+                System.out.println(
+                        "\n>>> Processing [" + (++processed) + "/" + tasks.size() + "]: " + task.getSourceFilePath());
                 try {
                     AgentOrchestrator orchestrator = new AgentOrchestrator(
-                            config, llmClient.createStreamingModel(), tools
-                    );
+                            config, llmClient.createStreamingModel(), tools);
                     // Pass task context to orchestrator
                     String taskPrompt = analyzer.buildTaskPrompt(task);
                     orchestrator.run(task.getSourceFilePath(), taskPrompt);
@@ -365,29 +431,25 @@ public class App implements Callable<Integer> {
         }
     }
 
-    @Command(name = "config", 
-            mixinStandardHelpOptions = true,
-            description = "Configure and persist agent settings to agent.yml.",
-            header = "Agent Configuration Utility",
-            optionListHeading = "%nOptions:%n")
+    @Command(name = "config", mixinStandardHelpOptions = true, description = "Configure and persist agent settings to agent.yml.", header = "Agent Configuration Utility", optionListHeading = "%nOptions:%n")
     public static class ConfigCommand implements Callable<Integer> {
 
-        @Option(names = {"--protocol"}, description = "Set the LLM Protocol. Supported: openai, anthropic, gemini.")
+        @Option(names = { "--protocol" }, description = "Set the LLM Protocol. Supported: openai, anthropic, gemini.")
         private String protocol;
 
-        @Option(names = {"--api-key"}, description = "Set the LLM API Key for authentication.")
+        @Option(names = { "--api-key" }, description = "Set the LLM API Key for authentication.")
         private String apiKey;
 
-        @Option(names = {"--base-url"}, description = "Set the LLM Base URL (e.g., https://api.openai.com/v1).")
+        @Option(names = { "--base-url" }, description = "Set the LLM Base URL (e.g., https://api.openai.com/v1).")
         private String baseUrl;
 
-        @Option(names = {"--model"}, description = "Set the LLM Model Name (e.g., gpt-4, gemini-pro).")
+        @Option(names = { "--model" }, description = "Set the LLM Model Name (e.g., gpt-4, gemini-pro).")
         private String modelName;
 
-        @Option(names = {"--temperature"}, description = "Set the LLM sampling temperature (0.0 to 1.0).")
+        @Option(names = { "--temperature" }, description = "Set the LLM sampling temperature (0.0 to 1.0).")
         private Double temperature;
 
-        @Option(names = {"--max-retries"}, description = "Set the maximum number of retries for the workflow.")
+        @Option(names = { "--max-retries" }, description = "Set the maximum number of retries for the workflow.")
         private Integer maxRetries;
 
         @Override
@@ -461,4 +523,3 @@ public class App implements Callable<Integer> {
         }
     }
 }
-

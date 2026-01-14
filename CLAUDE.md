@@ -181,6 +181,9 @@ workflow:
   # 最大反馈循环迭代次数
   maxFeedbackLoopIterations: 3
 
+  # 默认 Skill（动态工具选择，减少 token 消耗）
+  # default-skill: "full"
+
 # 增量模式配置
 incremental:
   # 模式: UNCOMMITTED | STAGED_ONLY | COMPARE_REFS
@@ -192,6 +195,24 @@ incremental:
 
   # 文件路径排除模式
   # excludePatterns: ".*Test\\.java"
+
+# Skills 配置 - 动态工具选择（减少 token 消耗）
+skills:
+  - name: "analysis"
+    description: "代码分析阶段"
+    tools: [CodeAnalyzerTool, FileSystemTool, BoundaryAnalyzerTool, StyleAnalyzerTool]
+  - name: "generation"
+    description: "测试生成阶段"
+    tools: [FileSystemTool, DirectoryTool, KnowledgeBaseTool, SyntaxCheckerTool]
+  - name: "verification"
+    description: "测试验证阶段"
+    tools: [MavenExecutorTool, TestReportTool, CoverageTool, FileSystemTool]
+  - name: "repair"
+    description: "修复阶段"
+    tools: [FileSystemTool, TestReportTool, CodeAnalyzerTool, SyntaxCheckerTool]
+  - name: "full"
+    description: "完整工具集（默认）"
+    tools: []  # 空数组表示使用全部工具
 ```
 
 ### LLM Protocols
@@ -245,6 +266,47 @@ To add a new tool for the Agent to use:
 3. Use `@P` for parameter descriptions
 4. The tool will be auto-discovered by `ToolFactory.loadAndWrapTools()` via reflection
 5. For initialization needs, check for instanceof in ToolFactory (like `KnowledgeBaseTool`)
+6. **可选**: 将工具添加到相关的 skill 配置中，以便按需加载
+
+## 动态工具选择 (Skill-based Tool Selection)
+
+通过 Skill 机制按需传递工具给 LLM，减少 token 消耗（约 60-70%）。
+
+### 使用方式
+
+**CLI 参数指定 skill:**
+```bash
+java -jar utagent.jar --target Foo.java --skill analysis
+```
+
+**配置文件设置默认 skill:**
+```yaml
+workflow:
+  default-skill: "generation"
+```
+
+### 内置 Skills
+
+| Skill | 描述 | 工具数量 | 估算节省 |
+|-------|------|----------|----------|
+| `analysis` | 代码分析阶段 | 6 | ~60% |
+| `generation` | 测试生成阶段 | 5 | ~65% |
+| `verification` | 测试验证阶段 | 5 | ~65% |
+| `repair` | 修复阶段 | 5 | ~65% |
+| `full` | 完整工具集 | 全部 | 基准 |
+
+### 自定义 Skill
+
+在 `agent.yml` 中添加自定义 skill:
+```yaml
+skills:
+  - name: "my-custom-skill"
+    description: "自定义工具集"
+    tools:
+      - FileSystemTool
+      - CodeAnalyzerTool
+      - MavenExecutorTool
+```
 
 ---
 
@@ -264,6 +326,7 @@ To add a new tool for the Agent to use:
 | `--max-retries` | | 最大重试次数 | 3 |
 | `--verbose` | `-v` | 启用详细日志 | false |
 | `--interactive` | `-i` | 启用交互确认模式 | false |
+| `--skill` | | 使用指定 skill 的工具子集 | 全部工具 |
 
 ### 目标选项
 
@@ -382,6 +445,10 @@ java -Dut.agent.log.level=DEBUG -jar unit-test-agent-4j.jar --target Foo.java
 - **配置**: `workflow.use-lsp: true`
 - **方法**: `initializeLsp()`, `checkSyntaxWithLsp()`, `shutdownLsp()`
 - **自动下载**: JDT Language Server 1.50.0
+- **自动初始化**: 当 `use-lsp: true` 时，在程序启动时自动初始化 LSP 服务（无需 LLM 手动调用）
+- **强制使用**: DynamicPromptBuilder 会自动在 System Prompt 中添加强制使用 LSP 的指令
+- **启动方式**: 直接使用 Java 命令启动 JDT LS（绕过 Python 脚本，更稳定）
+- **错误回退**: LSP 初始化失败时自动回退到 JavaParser，不影响主流程
 
 ---
 

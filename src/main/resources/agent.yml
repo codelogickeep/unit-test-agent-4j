@@ -18,6 +18,7 @@ workflow:
   maxRetries: 5                           # Max retry attempts on failure
   coverageThreshold: 80                   # Coverage threshold (%)
   interactive: false                      # Interactive confirmation mode
+  # default-skill: "full"                 # Default skill name (null = use all tools)
 
 # Batch Mode Settings (for --project)
 batch:
@@ -45,10 +46,52 @@ mcp:
     # - name: "server-name"
     #   url: "http://localhost:8080"
 
-# Skills Configuration
-skills: []                                # Custom skills
-  # - name: "custom-skill"
-  #   description: "Skill description"
-  #   type: "prompt"
-  #   params:
-  #     template: "skill-template.st"
+# Skills Configuration - Dynamic Tool Selection
+# Each skill defines a subset of tools to reduce token usage
+# Use --skill <name> or set workflow.default-skill to activate
+skills:
+  # Analysis phase - read and understand source code
+  - name: "analysis"
+    description: "Code analysis phase - read and understand source code"
+    tools:
+      - CodeAnalyzerTool
+      - FileSystemTool
+      - BoundaryAnalyzerTool
+      - StyleAnalyzerTool
+      - ProjectScannerTool
+      - TestDiscoveryTool
+
+  # Generation phase - generate and write test code
+  - name: "generation"
+    description: "Test generation phase - generate and write test files"
+    tools:
+      - FileSystemTool
+      - DirectoryTool
+      - KnowledgeBaseTool
+      - SyntaxCheckerTool
+      - CodeAnalyzerTool
+
+  # Verification phase - run tests and check coverage
+  - name: "verification"
+    description: "Test verification phase - execute tests and check coverage"
+    tools:
+      - MavenExecutorTool
+      - TestReportTool
+      - CoverageTool
+      - FileSystemTool
+      - MutationTestTool
+
+  # Repair phase - fix failing tests
+  - name: "repair"
+    description: "Repair phase - fix test failures based on error reports"
+    tools:
+      - FileSystemTool
+      - TestReportTool
+      - CodeAnalyzerTool
+      - SyntaxCheckerTool
+      - MavenExecutorTool
+
+  # Full toolset (default) - use all available tools
+  - name: "full"
+    description: "Full toolset - use all available tools"
+    tools: []  # Empty means use all tools

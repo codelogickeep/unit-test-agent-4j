@@ -251,6 +251,37 @@ java -jar utagent.jar \
   -i
 ```
 
+### Skill-based Tool Selection
+
+Reduce token usage by loading only relevant tools for specific tasks.
+
+```bash
+# Use analysis skill (6 tools instead of 15)
+java -jar utagent.jar \
+  --target path/to/MyService.java \
+  --skill analysis
+
+# Use generation skill for test writing
+java -jar utagent.jar \
+  --target path/to/MyService.java \
+  --skill generation
+
+# Use verification skill for running tests
+java -jar utagent.jar \
+  --target path/to/MyService.java \
+  --skill verification
+```
+
+**Built-in Skills:**
+
+| Skill | Description | Tools | Token Savings |
+|-------|-------------|-------|---------------|
+| `analysis` | Code analysis phase | 6 | ~60% |
+| `generation` | Test generation phase | 5 | ~65% |
+| `verification` | Test verification phase | 5 | ~65% |
+| `repair` | Fix failing tests | 5 | ~65% |
+| `full` | All tools (default) | 15 | baseline |
+
 **Interactive Prompts:**
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -318,6 +349,12 @@ java -jar utagent.jar \
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--interactive` | `-i` | Enable interactive confirmation mode |
+
+### Skill Options (Dynamic Tool Selection)
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--skill` | Use specific skill's tool subset | `analysis`, `generation`, `verification` |
 
 ## Configuration
 
@@ -435,9 +472,29 @@ mcp:
   servers: []
 
 # ═══════════════════════════════════════════════════════════════════
-# Skills Configuration
+# Skills Configuration (Dynamic Tool Selection)
+# Reduces token usage by ~60-70% by only loading relevant tools
 # ═══════════════════════════════════════════════════════════════════
-skills: []
+skills:
+  - name: "analysis"
+    description: "Code analysis phase"
+    tools: [CodeAnalyzerTool, FileSystemTool, BoundaryAnalyzerTool, StyleAnalyzerTool, ProjectScannerTool, TestDiscoveryTool]
+  - name: "generation"
+    description: "Test generation phase"
+    tools: [FileSystemTool, DirectoryTool, KnowledgeBaseTool, SyntaxCheckerTool, CodeAnalyzerTool]
+  - name: "verification"
+    description: "Test verification phase"
+    tools: [MavenExecutorTool, TestReportTool, CoverageTool, FileSystemTool, MutationTestTool]
+  - name: "repair"
+    description: "Repair phase"
+    tools: [FileSystemTool, TestReportTool, CodeAnalyzerTool, SyntaxCheckerTool, MavenExecutorTool]
+  - name: "full"
+    description: "Full toolset (default)"
+    tools: []  # Empty = use all tools
+
+# Set default skill in workflow section:
+# workflow:
+#   default-skill: "analysis"
 ```
 
 ### Environment Variables

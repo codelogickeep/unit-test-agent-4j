@@ -113,6 +113,21 @@ public class DynamicPromptBuilder {
             context.append("- Interactive mode: Enabled (user will confirm file writes)\n");
         }
 
+        // 当 use-lsp 启用时，强制使用 LSP 进行语法检查
+        if (workflow.isUseLsp()) {
+            context.append("\n### LSP SYNTAX CHECK (MANDATORY)\n");
+            context.append("**IMPORTANT**: LSP is ENABLED and auto-initialized for this project.\n\n");
+            context.append("**YOU MUST USE LSP FOR ALL SYNTAX CHECKS:**\n");
+            context.append("1. Use `checkSyntaxWithLsp(filePath)` to check Java files AFTER writing them\n");
+            context.append("2. Use `checkContentWithLsp(content, targetPath)` to check code BEFORE writing to file\n");
+            context.append("3. LSP detects: type errors, missing imports, undefined methods, wrong signatures\n");
+            context.append("4. **DO NOT** use `checkSyntax` or `checkSyntaxContent` (JavaParser is insufficient)\n\n");
+            context.append("**WORKFLOW WITH LSP:**\n");
+            context.append("- Before writing test file: `checkContentWithLsp(testCode, testFilePath)` to validate\n");
+            context.append("- After writing test file: `checkSyntaxWithLsp(testFilePath)` to confirm no errors\n");
+            context.append("- Fix any LSP_ERRORS before running tests\n");
+        }
+
         return context.toString();
     }
 

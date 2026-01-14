@@ -29,12 +29,18 @@ import java.util.stream.Collectors;
  * - 验证 import 语句是否完整
  * - 检查常见的引用错误
  * - 提供详细的错误信息和修复建议
+ * 
+ * 当 LSP 启用且正常时，自动委托给 LspSyntaxCheckerTool 进行更完整的语义检查
  */
 @Slf4j
 public class SyntaxCheckerTool implements AgentTool {
 
     private String projectRoot;
     private final JavaParser javaParser;
+    
+    // LSP 委托：当 LSP 启用且正常时，自动使用 LSP 进行检查
+    private LspSyntaxCheckerTool lspDelegate;
+    private boolean lspEnabled = false;
 
     public SyntaxCheckerTool() {
         this.javaParser = new JavaParser();
@@ -43,12 +49,29 @@ public class SyntaxCheckerTool implements AgentTool {
     public void setProjectRoot(String projectRoot) {
         this.projectRoot = projectRoot;
     }
+    
+    /**
+     * 设置 LSP 委托。当 LSP 可用时，checkSyntax 会自动使用 LSP 进行检查。
+     */
+    public void setLspDelegate(LspSyntaxCheckerTool lspTool, boolean enabled) {
+        this.lspDelegate = lspTool;
+        this.lspEnabled = enabled;
+        if (enabled && lspTool != null) {
+            log.info("SyntaxCheckerTool: LSP delegate enabled, will use LSP for syntax checks");
+        }
+    }
 
     @Tool("Check Java file syntax before compilation. Returns syntax errors and suggestions if any.")
     public String checkSyntax(
             @P("Path to the Java file to check") String filePath) {
         
         log.info("Tool Input - checkSyntax: path={}", filePath);
+        
+        // 当 LSP 启用且正常时，自动委托给 LSP 进行更完整的语义检查
+        if (lspEnabled && lspDelegate != null) {
+            log.info("Delegating to LSP for syntax check (LSP enabled)");
+            return lspDelegate.checkSyntaxWithLsp(filePath);
+        }
         
         Path path = resolvePath(filePath);
         if (!Files.exists(path)) {
@@ -59,7 +82,7 @@ public class SyntaxCheckerTool implements AgentTool {
 
         try {
             String content = Files.readString(path);
-            return checkSyntaxContent(content, filePath);
+            return checkSyntaxContentInternal(content, filePath);
         } catch (IOException e) {
             String result = "ERROR: Failed to read file: " + e.getMessage();
             log.info("Tool Output - checkSyntax: {}", result);
@@ -74,6 +97,19 @@ public class SyntaxCheckerTool implements AgentTool {
         
         log.info("Tool Input - checkSyntaxContent: fileName={}, contentLength={}", fileName, content.length());
         
+        // 当 LSP 启用且正常时，自动委托给 LSP 进行更完整的语义检查
+        if (lspEnabled && lspDelegate != null) {
+            log.info("Delegating to LSP for content syntax check (LSP enabled)");
+            return lspDelegate.checkContentWithLsp(content, fileName);
+        }
+        
+        return checkSyntaxContentInternal(content, fileName);
+    }
+    
+    /**
+     * 内部方法：使用 JavaParser 进行语法检查
+     */
+    private String checkSyntaxContentInternal(String content, String fileName) {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         

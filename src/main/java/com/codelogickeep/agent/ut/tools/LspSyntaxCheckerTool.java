@@ -49,9 +49,11 @@ public class LspSyntaxCheckerTool implements AgentTool {
         this.projectRoot = projectRoot;
     }
 
-    @Tool("Initialize LSP server for the project. Automatically downloads JDT LS if needed.")
-    public String initializeLsp(
-            @P("Path to the project root directory") String projectPath) {
+    /**
+     * Initialize LSP server for the project. Called automatically when use-lsp is enabled.
+     * This is NOT a tool - it's called internally during startup.
+     */
+    public String initializeLsp(String projectPath) {
         
         log.info("Tool Input - initializeLsp: projectPath={}", projectPath);
         
@@ -73,7 +75,16 @@ public class LspSyntaxCheckerTool implements AgentTool {
             log.info("Starting JDT Language Server...");
             lspProcess = jdtLsManager.startJdtls(projectPath);
             
-            // 3. 初始化 LSP 连接
+            // 短暂等待确保进程启动
+            Thread.sleep(500);
+            
+            // 检查进程是否还在运行
+            if (!lspProcess.isAlive()) {
+                int exitCode = lspProcess.exitValue();
+                return "ERROR: JDT LS process terminated unexpectedly with exit code: " + exitCode;
+            }
+            
+            // 3. 立即初始化 LSP 连接（JDT LS 期望立即收到初始化消息）
             initializeLspConnection(projectPath);
             
             initialized = true;
@@ -87,10 +98,7 @@ public class LspSyntaxCheckerTool implements AgentTool {
         }
     }
     
-    @Tool("Get JDT Language Server status and installation info")
-    public String getJdtLsInfo() {
-        return jdtLsManager.getStatus();
-    }
+    // getJdtLsInfo merged into getLspStatus below
 
     @Tool("Check Java file syntax using LSP (detects type errors, missing imports, etc.)")
     public String checkSyntaxWithLsp(
@@ -187,7 +195,10 @@ public class LspSyntaxCheckerTool implements AgentTool {
         }
     }
 
-    @Tool("Shutdown LSP server and release resources")
+    /**
+     * Shutdown LSP server and release resources.
+     * This is NOT a tool - it's called internally during application shutdown.
+     */
     public String shutdownLsp() {
         log.info("Tool Input - shutdownLsp");
         
@@ -218,20 +229,25 @@ public class LspSyntaxCheckerTool implements AgentTool {
         }
     }
 
-    @Tool("Get LSP server status")
+    @Tool("Get LSP server status and JDT Language Server installation info")
     public String getLspStatus() {
+        StringBuilder sb = new StringBuilder();
+        
+        // LSP 运行状态
         if (!initialized) {
-            return "LSP Status: NOT_INITIALIZED\n" +
-                   "Call initializeLsp(projectPath) to start the server.";
+            sb.append("LSP Status: NOT_INITIALIZED\n");
+            sb.append("Note: LSP will be auto-initialized when use-lsp is enabled in config.\n\n");
+        } else {
+            sb.append("LSP Status: RUNNING\n");
+            sb.append("Project Root: ").append(projectRoot).append("\n");
+            sb.append("Cached Diagnostics: ").append(diagnosticsCache.size()).append(" files\n\n");
         }
         
-        return String.format(
-            "LSP Status: RUNNING\n" +
-            "Project Root: %s\n" +
-            "Cached Diagnostics: %d files",
-            projectRoot,
-            diagnosticsCache.size()
-        );
+        // JDT LS 安装信息
+        sb.append("JDT Language Server Info:\n");
+        sb.append(jdtLsManager.getStatus());
+        
+        return sb.toString();
     }
 
     // ==================== Private Methods ====================
@@ -258,8 +274,9 @@ public class LspSyntaxCheckerTool implements AgentTool {
         initParams.setRootUri(Paths.get(projectPath).toUri().toString());
         initParams.setCapabilities(createClientCapabilities());
         
-        // 发送初始化请求
-        InitializeResult initResult = languageServer.initialize(initParams).get(30, TimeUnit.SECONDS);
+        // 发送初始化请求（JDT LS 启动可能较慢，增加超时时间）
+        log.info("Waiting for LSP server to initialize (timeout: 60s)...");
+        InitializeResult initResult = languageServer.initialize(initParams).get(60, TimeUnit.SECONDS);
         log.info("LSP server initialized: {}", initResult.getCapabilities());
         
         // 发送 initialized 通知
@@ -379,6 +396,18 @@ public class LspSyntaxCheckerTool implements AgentTool {
         @Override
         public void logMessage(MessageParams message) {
             log.debug("LSP log: {}", message.getMessage());
+        }
+        
+        @Override
+        public CompletableFuture<Void> registerCapability(RegistrationParams params) {
+            log.debug("LSP registerCapability: {}", params.getRegistrations());
+            return CompletableFuture.completedFuture(null);
+        }
+        
+        @Override
+        public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
+            log.debug("LSP unregisterCapability: {}", params.getUnregisterations());
+            return CompletableFuture.completedFuture(null);
         }
     }
 }

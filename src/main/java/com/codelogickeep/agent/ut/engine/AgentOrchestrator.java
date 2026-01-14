@@ -2,6 +2,7 @@ package com.codelogickeep.agent.ut.engine;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.tools.StyleAnalyzerTool;
+import com.codelogickeep.agent.ut.tools.ToolFactory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
@@ -32,7 +33,9 @@ public class AgentOrchestrator {
 
     private final AppConfig config;
     private final StreamingChatModel streamingLlm;
-    private final List<Object> tools;
+    private final List<Object> allTools;  // 所有可用工具
+    private List<Object> activeTools;     // 当前激活的工具（可能是子集）
+    private String currentSkill;          // 当前使用的 skill 名称
     
     // 可选的增强组件
     private DynamicPromptBuilder dynamicPromptBuilder;
@@ -45,7 +48,8 @@ public class AgentOrchestrator {
             List<Object> tools) {
         this.config = config;
         this.streamingLlm = streamingLlm;
-        this.tools = tools;
+        this.allTools = tools;
+        this.activeTools = tools;  // 默认使用全部工具
         
         // 初始化辅助组件
         initializeComponents();
@@ -81,7 +85,7 @@ public class AgentOrchestrator {
 
     @SuppressWarnings("unchecked")
     private <T> T findTool(Class<T> toolClass) {
-        for (Object tool : tools) {
+        for (Object tool : activeTools) {
             if (toolClass.isInstance(tool)) {
                 return (T) tool;
             }
@@ -208,7 +212,7 @@ public class AgentOrchestrator {
         return AiServices.builder(UnitTestAssistant.class)
                 .streamingChatModel(streamingLlm)
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(memorySize))
-                .tools(tools)
+                .tools(activeTools)  // 使用当前激活的工具集
                 .systemMessageProvider(chatMemoryId -> systemPrompt)
                 .build();
     }
@@ -217,10 +221,46 @@ public class AgentOrchestrator {
      * 打印注册的工具
      */
     private void logRegisteredTools() {
-        log.info("Registered {} tools:", tools.size());
-        for (Object tool : tools) {
+        log.info("Registered {} tools{}:", activeTools.size(), 
+                currentSkill != null ? " (skill: " + currentSkill + ")" : "");
+        for (Object tool : activeTools) {
             log.info("  - {}", tool.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * 切换到指定的 skill，更新激活的工具集
+     * @param skillName skill 名称，null 表示使用全部工具
+     */
+    public void setSkill(String skillName) {
+        if (skillName == null || skillName.isEmpty()) {
+            this.activeTools = this.allTools;
+            this.currentSkill = null;
+            log.info("Using all {} tools", allTools.size());
+        } else {
+            List<Object> filtered = ToolFactory.filterToolsBySkill(allTools, config, skillName);
+            if (!filtered.isEmpty()) {
+                this.activeTools = filtered;
+                this.currentSkill = skillName;
+                log.info("Switched to skill '{}' with {} tools", skillName, filtered.size());
+            } else {
+                log.warn("Skill '{}' not found or empty, keeping current tools", skillName);
+            }
+        }
+    }
+
+    /**
+     * 获取当前使用的 skill 名称
+     */
+    public String getCurrentSkill() {
+        return currentSkill;
+    }
+
+    /**
+     * 获取当前激活的工具数量
+     */
+    public int getActiveToolCount() {
+        return activeTools.size();
     }
 
     /**

@@ -71,6 +71,8 @@ public class AppConfig {
         private boolean interactive = false; // 交互式确认模式
         @JsonProperty("use-lsp")
         private boolean useLsp = false; // 是否使用 LSP 进行语法检查（默认使用 JavaParser）
+        @JsonProperty("default-skill")
+        private String defaultSkill; // 默认使用的 skill 名称，null 表示使用全部工具
     }
     
     @Data
@@ -84,5 +86,6 @@ public class AppConfig {
         private String description;
         private String type;
         private Map<String, Object> params;
+        private List<String> tools;  // 工具类名列表，空或 null 表示使用全部工具
     }
 }
