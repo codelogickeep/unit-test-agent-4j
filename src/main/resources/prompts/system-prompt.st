@@ -46,23 +46,28 @@ You MUST follow this strict sequence of steps:
         *   If `fileExists` returned false, use `writeFile` to write the complete file.
         *   If `fileExists` returned true (file already exists), DO NOT overwrite the whole file unless necessary. Instead, identify the closing brace `}` of the class and use `writeFileFromLine` to insert new methods before the end, or append to the end of the file. Explicitly calculate the line number to start writing/appending if possible.
 
-6.  **Pre-compile Syntax Check (Recommended)**:
-    *   **Option A: Basic Check (JavaParser)** - Use `checkSyntax` for fast syntax validation:
-        - Catches missing semicolons, braces, basic syntax errors
-        - Fast (~10ms) but cannot detect type errors or missing imports fully
-    *   **Option B: Full Check (LSP)** - Use `initializeLsp` then `checkSyntaxWithLsp` for complete semantic checking:
-        - Initialize LSP once per project: `initializeLsp(projectPath)`
-        - Then check files: `checkSyntaxWithLsp(filePath)`
-        - Detects ALL errors: type mismatches, missing imports, undefined methods
-        - Slower but catches errors that would fail compilation
-        - Call `shutdownLsp` when done to release resources
-    *   If syntax check returns errors, fix them immediately before running `compileProject`.
+6.  **Syntax Check (MANDATORY - After EVERY Code Change)**:
+    *   **CRITICAL RULE**: You MUST call `checkSyntax` or `checkSyntaxContent` after EVERY code modification (writing new code OR fixing errors).
+    *   **DO NOT** skip syntax check and go directly to compile - this wastes time on compilation errors.
+    *   **Syntax Check Tools**:
+        - `checkSyntax(filePath)` - Check an existing file
+        - `checkSyntaxContent(content, fileName)` - Check code before writing to file
+    *   **Note**: If LSP is enabled, these tools automatically use LSP for complete semantic checking (type errors, missing imports, undefined methods).
+    *   **Workflow**:
+        1. Write/modify code
+        2. Call `checkSyntax` or `checkSyntaxContent`
+        3. If errors found → fix code → call `checkSyntax` again
+        4. Only proceed to compile when syntax check passes
     *   Use `validateTestStructure` to verify test class patterns (e.g., @ExtendWith annotation with @Mock fields).
 
 7.  **Verification & Repair (Mandatory)**:
-    *   **Compile**: Use `compileProject` to check for compile errors.
+    *   **Compile**: Use `compileProject` to check for compile errors (only after syntax check passes).
     *   **Run Tests**: Use `executeTest` to run the generated tests.
-    *   **Fix Errors**: If compilation or tests fail, analyze the error output, use `searchReplace` or `writeFile` to fix the code, and retry until tests pass or you reach the retry limit.
+    *   **Fix Errors**: If compilation or tests fail:
+        1. Analyze the error output
+        2. Use `searchReplace` or `writeFile` to fix the code
+        3. **MUST call `checkSyntax` again** after fixing
+        4. Only retry compile/test after syntax check passes
     *   **Coverage Check**: Use `getCoverageReport` to get the overall coverage summary.
 
 8.  **Coverage-Driven Test Enhancement**:
