@@ -18,7 +18,7 @@ NC='\033[0m'
 
 # 配置
 REPO="codelogickeep/unit-test-agent-4j"
-VERSION="${VERSION:-v0.8.0}"
+VERSION="${VERSION:-v1.0.0}"
 INSTALL_DIR="$HOME/.utagent"
 BUILD_DIR="$HOME/.utagent-build"
 

@@ -202,3 +202,4 @@
 | 2026-01-12 | 0.7.0 | 完成 Phase 1 剩余: 单元测试 (Maven/Scanner/Discovery), AgentToolException 规范化, 日志分级 |
 | 2026-01-12 | 0.7.1 | Phase 1 完善: KnowledgeBaseTool 测试, AgentToolException 扩展 (EXTERNAL_TOOL_ERROR 等), 配置提示优化 |
 | 2026-01-12 | 0.8.0 | Phase 1 完成: AgentOrchestrator 重构 (RetryExecutor + StreamingResponseHandler), AgentToolException Builder 模式 |
+| 2026-01-15 | 1.0.0 | 动态工具选择 (skill-based), LSP 自动委托语法检查, 强制语法检查流程规范 |

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Unit Test Agent 4j is an AI-powered Java tool that automatically generates JUnit 5 + Mockito unit tests for legacy systems. It uses LangChain4j to integrate with multiple LLM providers (OpenAI, Anthropic, Gemini) and includes self-healing capabilities.
 
-**版本**: 0.8.0 (Phase 1-5 已完成)
+**版本**: 1.0.0 (Phase 1-5 已完成)
 
 ### 核心特性
 
