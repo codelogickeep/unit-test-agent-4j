@@ -1,11 +1,18 @@
 package com.codelogickeep.agent.ut.engine;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
+import com.codelogickeep.agent.ut.framework.adapter.LlmAdapter;
+import com.codelogickeep.agent.ut.framework.adapter.LlmAdapterFactory;
+import com.codelogickeep.agent.ut.framework.model.AssistantMessage;
+import com.codelogickeep.agent.ut.framework.model.Message;
+import com.codelogickeep.agent.ut.framework.model.UserMessage;
 import com.codelogickeep.agent.ut.tools.JdtLsManager;
 
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,6 +28,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class EnvironmentChecker {
+    private static final Logger log = LoggerFactory.getLogger(EnvironmentChecker.class);
 
     /**
      * 检查环境（仅检查模式）
@@ -253,6 +261,12 @@ public class EnvironmentChecker {
                 return false;
             }
             
+            // 优先使用自研框架进行检查
+            if (config.getWorkflow() != null && config.getWorkflow().isUseSimpleFramework()) {
+                return checkLlmWithSimpleFramework(config);
+            }
+            
+            // 使用 LangChain4j 检查
             LlmClient llmClient = new LlmClient(config.getLlm());
             StreamingChatModel model = llmClient.createStreamingModel();
             
@@ -277,7 +291,7 @@ public class EnvironmentChecker {
                 }
             });
 
-            if (latch.await(30, TimeUnit.SECONDS)) {
+            if (latch.await(60, TimeUnit.SECONDS)) {
                 if (success[0]) {
                     System.out.println("OK (Configuration is valid and LLM is reachable)");
                     return true;
@@ -291,6 +305,39 @@ public class EnvironmentChecker {
             }
         } catch (Exception e) {
             System.out.println("FAILED (" + e.getMessage() + ")");
+            return false;
+        }
+    }
+    
+    /**
+     * 使用自研框架检查 LLM
+     */
+    private static boolean checkLlmWithSimpleFramework(AppConfig config) {
+        try {
+            LlmAdapter adapter = LlmAdapterFactory.create(config.getLlm());
+            
+            log.info("Using {} for LLM check", adapter.getName());
+            
+            // 简单的 ping 测试
+            List<Message> messages = new ArrayList<>();
+            messages.add(new UserMessage("ping"));
+            
+            AssistantMessage response = adapter.chat(messages, null);
+            
+            if (response != null && (response.content() != null || response.hasToolCalls())) {
+                System.out.println("OK (Custom framework - " + adapter.getName() + ")");
+                return true;
+            } else {
+                System.out.println("FAILED (Empty response from LLM)");
+                return false;
+            }
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : e.toString();
+            // 截断长消息
+            if (msg.length() > 100) {
+                msg = msg.substring(0, 100) + "...";
+            }
+            System.out.println("FAILED (" + msg + ")");
             return false;
         }
     }

@@ -3,6 +3,8 @@ package com.codelogickeep.agent.ut;
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
 import com.codelogickeep.agent.ut.engine.LlmClient;
+import com.codelogickeep.agent.ut.framework.SimpleAgentOrchestrator;
+import com.codelogickeep.agent.ut.tools.CodeAnalyzerTool;
 import com.codelogickeep.agent.ut.tools.FileSystemTool;
 import com.codelogickeep.agent.ut.tools.LspSyntaxCheckerTool;
 import com.codelogickeep.agent.ut.tools.MavenExecutorTool;
@@ -231,6 +233,10 @@ public class App implements Callable<Integer> {
                 if (tool instanceof MethodIteratorTool) {
                     ((MethodIteratorTool) tool).setProjectRoot(projectRoot);
                 }
+                // 设置 CodeAnalyzerTool 的项目根路径
+                if (tool instanceof CodeAnalyzerTool) {
+                    ((CodeAnalyzerTool) tool).setProjectRoot(projectRoot);
+                }
             }
 
             // 当 use-lsp: true 时，自动初始化 LSP 服务
@@ -260,31 +266,56 @@ public class App implements Callable<Integer> {
                 System.out.println(">>> SyntaxCheckerTool will use LSP for syntax checks");
             }
 
-            AgentOrchestrator orchestrator = new AgentOrchestrator(
-                    config,
-                    llmClient.createStreamingModel(),
-                    tools);
+            // 5. Run Agent - 选择框架
+            boolean useSimpleFramework = config.getWorkflow() != null && config.getWorkflow().isUseSimpleFramework();
 
-            // 5. Run Agent
-            if (projectDir != null && targetFile != null) {
-                // Single file mode with explicit project directory
-                // targetFile is relative to projectDir
-                String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
-                System.out.println(">>> Agent started for target: " + absoluteTargetPath);
-                System.out.println(">>> Project root: " + projectRoot);
-                orchestrator.run(targetFile);
-                System.out.println(">>> Agent finished.");
-            } else if (projectDir != null) {
-                // Batch mode
-                return runBatchMode(config, llmClient, tools, projectRoot);
-            } else if (targetFile != null) {
-                // Single file mode
-                System.out.println(">>> Agent started for target: " + targetFile);
-                orchestrator.run(targetFile);
-                System.out.println(">>> Agent finished.");
+            if (useSimpleFramework) {
+                // 使用自研轻量级框架
+                System.out.println(">>> Using SimpleAgentFramework (custom implementation)");
+                SimpleAgentOrchestrator simpleOrchestrator = new SimpleAgentOrchestrator(config, tools);
+
+                if (projectDir != null && targetFile != null) {
+                    String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
+                    System.out.println(">>> Agent started for target: " + absoluteTargetPath);
+                    System.out.println(">>> Project root: " + projectRoot);
+                    simpleOrchestrator.run(targetFile);
+                    System.out.println(">>> Agent finished.");
+                } else if (projectDir != null) {
+                    // Batch mode - 暂时使用旧框架
+                    return runBatchMode(config, llmClient, tools, projectRoot);
+                } else if (targetFile != null) {
+                    System.out.println(">>> Agent started for target: " + targetFile);
+                    simpleOrchestrator.run(targetFile);
+                    System.out.println(">>> Agent finished.");
+                } else {
+                    System.err
+                            .println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
+                    return 1;
+                }
             } else {
-                System.err.println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
-                return 1;
+                // 使用 LangChain4j 框架
+                AgentOrchestrator orchestrator = new AgentOrchestrator(
+                        config,
+                        llmClient.createStreamingModel(),
+                        tools);
+
+                if (projectDir != null && targetFile != null) {
+                    String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
+                    System.out.println(">>> Agent started for target: " + absoluteTargetPath);
+                    System.out.println(">>> Project root: " + projectRoot);
+                    orchestrator.run(targetFile);
+                    System.out.println(">>> Agent finished.");
+                } else if (projectDir != null) {
+                    return runBatchMode(config, llmClient, tools, projectRoot);
+                } else if (targetFile != null) {
+                    System.out.println(">>> Agent started for target: " + targetFile);
+                    orchestrator.run(targetFile);
+                    System.out.println(">>> Agent finished.");
+                } else {
+                    System.err
+                            .println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
+                    return 1;
+                }
             }
 
             return 0;

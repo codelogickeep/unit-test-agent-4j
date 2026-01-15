@@ -25,12 +25,38 @@ import org.slf4j.LoggerFactory;
 
 public class CodeAnalyzerTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(CodeAnalyzerTool.class);
+    
+    private Path projectRoot;
+    
+    public void setProjectRoot(String rootPath) {
+        if (rootPath != null) {
+            this.projectRoot = Paths.get(rootPath).toAbsolutePath().normalize();
+            log.info("CodeAnalyzerTool project root set to: {}", projectRoot);
+        }
+    }
+    
+    /**
+     * 解析路径（相对路径相对于 projectRoot）
+     */
+    private Path resolvePath(String path) {
+        if (path == null) {
+            throw new IllegalArgumentException("Path cannot be null");
+        }
+        Path p = Paths.get(path);
+        if (p.isAbsolute()) {
+            return p;
+        }
+        if (projectRoot != null) {
+            return projectRoot.resolve(path).normalize();
+        }
+        return p.toAbsolutePath().normalize();
+    }
 
     @Tool("Analyze a Java class structure to understand methods and fields")
     public String analyzeClass(@P("Path to the Java source file") String path) throws IOException {
         log.info("Analyzing class structure: {}", path);
         log.debug("Tool Input - analyzeClass: path={}", path);
-        Path sourcePath = Paths.get(path);
+        Path sourcePath = resolvePath(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
         StringBuilder result = new StringBuilder();
@@ -79,7 +105,7 @@ public class CodeAnalyzerTool implements AgentTool {
     ) throws IOException {
         log.info("Analyzing method: {} in {}", methodName, path);
         log.debug("Tool Input - analyzeMethod: path={}, methodName={}", path, methodName);
-        Path sourcePath = Paths.get(path);
+        Path sourcePath = resolvePath(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
         StringBuilder result = new StringBuilder();
@@ -137,7 +163,7 @@ public class CodeAnalyzerTool implements AgentTool {
     @Tool("Get compact method list with complexity for test prioritization")
     public String getMethodsForTesting(@P("Path to the Java source file") String path) throws IOException {
         log.info("Tool Input - getMethodsForTesting: path={}", path);
-        Path sourcePath = Paths.get(path);
+        Path sourcePath = resolvePath(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
         StringBuilder result = new StringBuilder();
@@ -379,7 +405,7 @@ public class CodeAnalyzerTool implements AgentTool {
     @Tool("Analyze methods and return prioritized list for testing, identifying core functions")
     public String getPriorityMethods(@P("Path to the Java source file") String path) throws IOException {
         log.info("Tool Input - getPriorityMethods: path={}", path);
-        Path sourcePath = Paths.get(path);
+        Path sourcePath = resolvePath(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
         // Build call graph to count how many times each method is called
@@ -499,7 +525,7 @@ public class CodeAnalyzerTool implements AgentTool {
      * Get prioritized method list as structured data (for iteration)
      */
     public List<MethodInfo> getPriorityMethodsList(String path) throws IOException {
-        Path sourcePath = Paths.get(path);
+        Path sourcePath = resolvePath(path);
         CompilationUnit cu = StaticJavaParser.parse(sourcePath);
 
         Map<String, Integer> callCounts = new HashMap<>();
