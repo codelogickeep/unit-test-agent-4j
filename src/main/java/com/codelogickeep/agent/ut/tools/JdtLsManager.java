@@ -31,6 +31,10 @@ public class JdtLsManager {
 
     // 本地目录名
     private static final String JDTLS_DIR_NAME = "jdtls";
+    
+    // 本地缓存目录（用于从项目中复制预下载的 JDT LS）
+    private static final String LOCAL_CACHE_DIR = "jdt-lsp";
+    private static final String JDTLS_ARCHIVE_NAME = "jdt-language-server-1.50.0-202509041425.tar.gz";
 
     private final Path agentDir; // Agent JAR 所在目录
     private final Path jdtlsDir;
@@ -359,37 +363,82 @@ public class JdtLsManager {
 
             Path downloadFile = agentDir.resolve(JDTLS_FILENAME);
 
-            log.info("Downloading JDT LS {} (supports JDK 21+)...", JDTLS_VERSION);
-            log.info("URL: {}", JDTLS_DOWNLOAD_URL);
+            // 1. 优先从本地缓存目录复制（避免重复下载）
+            Path localArchive = tryFindLocalArchive();
+            if (localArchive != null) {
+                log.info("Found local JDT LS archive: {}", localArchive);
+                log.info("Copying to: {}", downloadFile);
+                Files.copy(localArchive, downloadFile, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                // 2. 从网络下载
+                log.info("Downloading JDT LS {} (supports JDK 21+)...", JDTLS_VERSION);
+                log.info("URL: {}", JDTLS_DOWNLOAD_URL);
 
-            if (downloadFile(JDTLS_DOWNLOAD_URL, downloadFile)) {
-                // 等待文件句柄完全释放（Windows 需要）
-                Thread.sleep(500);
-
-                // 解压
-                log.info("Extracting JDT LS to: {}", jdtlsDir);
-                extractTarGz(downloadFile, jdtlsDir);
-
-                // 清理下载文件
-                Files.deleteIfExists(downloadFile);
-
-                // 验证
-                if (isCachedJdtlsValid()) {
-                    log.info("JDT LS {} installed successfully: {}", JDTLS_VERSION, jdtlsLauncher);
-                    return true;
-                } else {
-                    log.error("JDT LS extraction failed - launcher not found");
+                if (!downloadFile(JDTLS_DOWNLOAD_URL, downloadFile)) {
+                    log.error("Failed to download JDT LS");
                     return false;
                 }
             }
 
-            log.error("Failed to download JDT LS");
-            return false;
+            // 等待文件句柄完全释放（Windows 需要）
+            Thread.sleep(500);
+
+            // 解压
+            log.info("Extracting JDT LS to: {}", jdtlsDir);
+            extractTarGz(downloadFile, jdtlsDir);
+
+            // 清理下载文件
+            Files.deleteIfExists(downloadFile);
+
+            // 验证
+            if (isCachedJdtlsValid()) {
+                log.info("JDT LS {} installed successfully: {}", JDTLS_VERSION, jdtlsLauncher);
+                return true;
+            } else {
+                log.error("JDT LS extraction failed - launcher not found");
+                return false;
+            }
 
         } catch (Exception e) {
             log.error("Failed to download/extract JDT LS", e);
             return false;
         }
+    }
+
+    /**
+     * 尝试从本地目录查找预下载的 JDT LS 压缩包
+     * 查找顺序：
+     * 1. 项目根目录/jdt-lsp/
+     * 2. Agent 目录/jdt-lsp/
+     * 3. 用户目录/.utagent/jdt-lsp/
+     */
+    private Path tryFindLocalArchive() {
+        // 可能的本地缓存位置
+        List<Path> searchPaths = new ArrayList<>();
+        
+        // 当前工作目录下的 jdt-lsp
+        searchPaths.add(Paths.get(System.getProperty("user.dir"), LOCAL_CACHE_DIR, JDTLS_ARCHIVE_NAME));
+        
+        // Agent 目录下的 jdt-lsp
+        searchPaths.add(agentDir.resolve(LOCAL_CACHE_DIR).resolve(JDTLS_ARCHIVE_NAME));
+        
+        // 用户目录下的 .utagent/jdt-lsp
+        searchPaths.add(Paths.get(System.getProperty("user.home"), ".utagent", LOCAL_CACHE_DIR, JDTLS_ARCHIVE_NAME));
+        
+        // 也检查简化名称
+        String simpleName = "jdt-language-server-1.50.0.tar.gz";
+        searchPaths.add(Paths.get(System.getProperty("user.dir"), LOCAL_CACHE_DIR, simpleName));
+        searchPaths.add(agentDir.resolve(LOCAL_CACHE_DIR).resolve(simpleName));
+        
+        for (Path path : searchPaths) {
+            if (Files.exists(path) && Files.isRegularFile(path)) {
+                log.debug("Found local JDT LS archive at: {}", path);
+                return path;
+            }
+        }
+        
+        log.debug("No local JDT LS archive found in search paths");
+        return null;
     }
 
     private boolean downloadFile(String urlStr, Path destination) {
