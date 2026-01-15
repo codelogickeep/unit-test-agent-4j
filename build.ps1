@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 
 # 配置
 $REPO = "codelogickeep/unit-test-agent-4j"
-$VERSION = if ($env:VERSION) { $env:VERSION } else { "v1.0.0" }
+$VERSION = if ($env:VERSION) { $env:VERSION } else { "v2.0.0" }
 $INSTALL_DIR = "$env:USERPROFILE\.utagent"
 $BUILD_DIR = "$env:USERPROFILE\.utagent-build"
 
