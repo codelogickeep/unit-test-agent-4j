@@ -1,8 +1,9 @@
 package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.agent.tool.ToolSpecifications;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
+import com.codelogickeep.agent.ut.framework.model.ToolDefinition;
+import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
 import org.reflections.Reflections;
 import org.reflections.scanners.Scanners;
 import org.reflections.util.ClasspathHelper;
@@ -10,6 +11,7 @@ import org.reflections.util.ConfigurationBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -219,20 +221,32 @@ public class ToolFactory {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 打印工具规格（使用自研框架）
+     */
     private static void printToolSpecifications(List<Object> tools) {
         System.out.println(">>> Loaded Tools & Specifications:");
+        
+        ToolRegistry registry = new ToolRegistry();
+        registry.registerAll(tools);
+        
         for (Object tool : tools) {
             System.out.println("--------------------------------------------------");
             System.out.println("Tool Class: " + tool.getClass().getSimpleName());
-            List<ToolSpecification> specs = ToolSpecifications.toolSpecificationsFrom(tool);
-            for (ToolSpecification spec : specs) {
-                System.out.println("  Function: " + spec.name());
-                if (spec.description() != null) {
-                    System.out.println("  Description: " + spec.description());
+            
+            // 获取该工具类中标注了 @Tool 的方法
+            for (Method method : tool.getClass().getMethods()) {
+                Tool toolAnnotation = method.getAnnotation(Tool.class);
+                if (toolAnnotation != null) {
+                    System.out.println("  Function: " + method.getName());
+                    if (!toolAnnotation.value().isEmpty()) {
+                        System.out.println("  Description: " + toolAnnotation.value());
+                    }
+                    System.out.println("  Parameters: " + method.getParameterCount());
                 }
-                System.out.println("  Parameters: " + spec.parameters());
             }
         }
         System.out.println("--------------------------------------------------");
+        System.out.println("Total tools: " + tools.size() + ", Total functions: " + registry.size());
     }
 }

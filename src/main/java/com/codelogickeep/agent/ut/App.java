@@ -1,8 +1,6 @@
 package com.codelogickeep.agent.ut;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import com.codelogickeep.agent.ut.engine.AgentOrchestrator;
-import com.codelogickeep.agent.ut.engine.LlmClient;
 import com.codelogickeep.agent.ut.framework.SimpleAgentOrchestrator;
 import com.codelogickeep.agent.ut.tools.CodeAnalyzerTool;
 import com.codelogickeep.agent.ut.tools.FileSystemTool;
@@ -28,7 +26,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-@Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "0.1.0", description = "AI Agent for generating JUnit 5 tests.", subcommands = {
+@Command(name = "unit-test-agent", mixinStandardHelpOptions = true, version = "1.1.0", description = "AI Agent for generating JUnit 5 tests.", subcommands = {
         App.ConfigCommand.class })
 public class App implements Callable<Integer> {
 
@@ -191,9 +189,6 @@ public class App implements Callable<Integer> {
             }
             List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath, activeSkill);
 
-            // 4. Initialize AI Engine
-            LlmClient llmClient = new LlmClient(config.getLlm());
-
             // Detect Project Root (Directory containing pom.xml near target file)
             // If --project is specified, use it as the project root
             String projectRoot;
@@ -266,56 +261,27 @@ public class App implements Callable<Integer> {
                 System.out.println(">>> SyntaxCheckerTool will use LSP for syntax checks");
             }
 
-            // 5. Run Agent - 选择框架
-            boolean useSimpleFramework = config.getWorkflow() != null && config.getWorkflow().isUseSimpleFramework();
+            // 5. Run Agent - 使用自研框架
+            System.out.println(">>> Using custom Agent framework (v1.1.0)");
+            SimpleAgentOrchestrator orchestrator = new SimpleAgentOrchestrator(config, tools);
 
-            if (useSimpleFramework) {
-                // 使用自研轻量级框架
-                System.out.println(">>> Using SimpleAgentFramework (custom implementation)");
-                SimpleAgentOrchestrator simpleOrchestrator = new SimpleAgentOrchestrator(config, tools);
-
-                if (projectDir != null && targetFile != null) {
-                    String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
-                    System.out.println(">>> Agent started for target: " + absoluteTargetPath);
-                    System.out.println(">>> Project root: " + projectRoot);
-                    simpleOrchestrator.run(targetFile);
-                    System.out.println(">>> Agent finished.");
-                } else if (projectDir != null) {
-                    // Batch mode - 暂时使用旧框架
-                    return runBatchMode(config, llmClient, tools, projectRoot);
-                } else if (targetFile != null) {
-                    System.out.println(">>> Agent started for target: " + targetFile);
-                    simpleOrchestrator.run(targetFile);
-                    System.out.println(">>> Agent finished.");
-                } else {
-                    System.err
-                            .println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
-                    return 1;
-                }
+            if (projectDir != null && targetFile != null) {
+                String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
+                System.out.println(">>> Agent started for target: " + absoluteTargetPath);
+                System.out.println(">>> Project root: " + projectRoot);
+                orchestrator.run(targetFile);
+                System.out.println(">>> Agent finished.");
+            } else if (projectDir != null) {
+                // Batch mode
+                return runBatchMode(config, tools, projectRoot);
+            } else if (targetFile != null) {
+                System.out.println(">>> Agent started for target: " + targetFile);
+                orchestrator.run(targetFile);
+                System.out.println(">>> Agent finished.");
             } else {
-                // 使用 LangChain4j 框架
-                AgentOrchestrator orchestrator = new AgentOrchestrator(
-                        config,
-                        llmClient.createStreamingModel(),
-                        tools);
-
-                if (projectDir != null && targetFile != null) {
-                    String absoluteTargetPath = new File(projectRoot, targetFile).getAbsolutePath();
-                    System.out.println(">>> Agent started for target: " + absoluteTargetPath);
-                    System.out.println(">>> Project root: " + projectRoot);
-                    orchestrator.run(targetFile);
-                    System.out.println(">>> Agent finished.");
-                } else if (projectDir != null) {
-                    return runBatchMode(config, llmClient, tools, projectRoot);
-                } else if (targetFile != null) {
-                    System.out.println(">>> Agent started for target: " + targetFile);
-                    orchestrator.run(targetFile);
-                    System.out.println(">>> Agent finished.");
-                } else {
-                    System.err
-                            .println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
-                    return 1;
-                }
+                System.err
+                        .println("Error: Missing required option: --target=<targetFile> or --project=<projectDir>");
+                return 1;
             }
 
             return 0;
@@ -421,7 +387,7 @@ public class App implements Callable<Integer> {
         return value;
     }
 
-    private int runBatchMode(AppConfig config, LlmClient llmClient, List<Object> tools, String projectRoot) {
+    private int runBatchMode(AppConfig config, List<Object> tools, String projectRoot) {
         System.out.println(">>> Batch mode started for project: " + projectRoot);
 
         int threshold = coverageThreshold != null ? coverageThreshold : 80;
@@ -452,8 +418,7 @@ public class App implements Callable<Integer> {
                 System.out.println(
                         "\n>>> Processing [" + (++processed) + "/" + tasks.size() + "]: " + task.getSourceFilePath());
                 try {
-                    AgentOrchestrator orchestrator = new AgentOrchestrator(
-                            config, llmClient.createStreamingModel(), tools);
+                    SimpleAgentOrchestrator orchestrator = new SimpleAgentOrchestrator(config, tools);
                     // Pass task context to orchestrator
                     String taskPrompt = analyzer.buildTaskPrompt(task);
                     orchestrator.run(task.getSourceFilePath(), taskPrompt);

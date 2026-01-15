@@ -394,21 +394,21 @@ class TestDiscoveryToolTest {
         @DisplayName("findTestClasses should have @Tool annotation")
         void findTestClasses_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = TestDiscoveryTool.class.getMethod("findTestClasses", String.class, String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("getExpectedTestPath should have @Tool annotation")
         void getExpectedTestPath_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = TestDiscoveryTool.class.getMethod("getExpectedTestPath", String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("hasTestClass should have @Tool annotation")
         void hasTestClass_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = TestDiscoveryTool.class.getMethod("hasTestClass", String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
     }
 

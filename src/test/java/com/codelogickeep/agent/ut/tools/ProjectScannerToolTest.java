@@ -347,14 +347,14 @@ class ProjectScannerToolTest {
         @DisplayName("scanProjectClasses should have @Tool annotation")
         void scanProjectClasses_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = ProjectScannerTool.class.getMethod("scanProjectClasses", String.class, String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("getSourceClassPaths should have @Tool annotation")
         void getSourceClassPaths_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = ProjectScannerTool.class.getMethod("getSourceClassPaths", String.class, String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
     }
 }

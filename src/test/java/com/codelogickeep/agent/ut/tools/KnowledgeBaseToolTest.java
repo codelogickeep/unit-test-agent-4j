@@ -404,28 +404,28 @@ class KnowledgeBaseToolTest {
         @DisplayName("getKnowledgeBaseStatus should have @Tool annotation")
         void getKnowledgeBaseStatus_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = KnowledgeBaseTool.class.getMethod("getKnowledgeBaseStatus");
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("searchKnowledge should have @Tool annotation")
         void searchKnowledge_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = KnowledgeBaseTool.class.getMethod("searchKnowledge", String.class, String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("searchTestingGuidelines should have @Tool annotation")
         void searchTestingGuidelines_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = KnowledgeBaseTool.class.getMethod("searchTestingGuidelines", String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("searchTestExamples should have @Tool annotation")
         void searchTestExamples_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = KnowledgeBaseTool.class.getMethod("searchTestExamples", String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
     }
 }

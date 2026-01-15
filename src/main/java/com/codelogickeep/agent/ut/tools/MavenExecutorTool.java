@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+import com.codelogickeep.agent.ut.framework.annotation.P;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
 
 public class MavenExecutorTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(MavenExecutorTool.class);

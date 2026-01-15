@@ -1,22 +1,12 @@
 package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
-import dev.langchain4j.data.document.Document;
-import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
-import dev.langchain4j.data.document.parser.TextDocumentParser;
-import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.data.document.splitter.DocumentSplitters;
-import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.store.embedding.EmbeddingMatch;
-import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
-import dev.langchain4j.store.embedding.EmbeddingSearchResult;
-import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
-import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
+import com.codelogickeep.agent.ut.framework.annotation.P;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,9 +15,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
-
+/**
+ * 知识库工具（简化版）
+ * 
+ * 注：LangChain4j 已移除，embedding 功能暂时禁用。
+ * 当前使用基于关键词的简单搜索作为替代。
+ */
 public class KnowledgeBaseTool implements AgentTool {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseTool.class);
 
@@ -36,17 +29,31 @@ public class KnowledgeBaseTool implements AgentTool {
             ".java", ".md", ".txt", ".xml", ".yml", ".yaml", ".json"
     );
 
-    private EmbeddingStore<TextSegment> embeddingStore;
-    private EmbeddingModel embeddingModel;
     private boolean isInitialized = false;
     private int documentCount = 0;
     private String indexedPath = null;
+    private List<DocumentInfo> documents = new ArrayList<>();
 
-    // Use AppConfig for consistency, though MiniLm doesn't strictly need it unless
-    // configured otherwise
+    /**
+     * 文档信息（简化版）
+     */
+    private static class DocumentInfo {
+        String path;
+        String content;
+        String type;
+        String fileName;
+        
+        DocumentInfo(String path, String content, String type, String fileName) {
+            this.path = path;
+            this.content = content;
+            this.type = type;
+            this.fileName = fileName;
+        }
+    }
+
     public void init(AppConfig config, String knowledgeBasePath) {
         if (knowledgeBasePath == null || knowledgeBasePath.isEmpty()) {
-            log.warn("No knowledge base path provided. Knowledge base tool will use fallback/empty logic.");
+            log.warn("No knowledge base path provided. Knowledge base tool will use fallback logic.");
             return;
         }
 
@@ -59,13 +66,9 @@ public class KnowledgeBaseTool implements AgentTool {
 
             log.info("Initializing knowledge base from: {}", knowledgeBasePath);
 
-            // Use local embedding model
-            this.embeddingModel = new AllMiniLmL6V2EmbeddingModel();
-            this.embeddingStore = new InMemoryEmbeddingStore<>();
-
-            List<Document> documents = new ArrayList<>();
+            documents = new ArrayList<>();
+            
             if (Files.isDirectory(path)) {
-                // Load all supported file types
                 try (Stream<Path> stream = Files.find(path, 10,
                         (p, attr) -> attr.isRegularFile() && isSupportedFile(p.toString()))) {
 
@@ -76,22 +79,19 @@ public class KnowledgeBaseTool implements AgentTool {
 
                     for (Path p : files) {
                         try {
-                            Document doc = FileSystemDocumentLoader.loadDocument(p.toString(), new TextDocumentParser());
-                            // Add metadata for source tracking
-                            doc.metadata().put("source", p.getFileName().toString());
-                            doc.metadata().put("type", getFileType(p.toString()));
-                            documents.add(doc);
-                            log.debug("Loaded document: {} ({})", p.getFileName(), getFileType(p.toString()));
+                            String content = Files.readString(p);
+                            String type = getFileType(p.toString());
+                            documents.add(new DocumentInfo(p.toString(), content, type, p.getFileName().toString()));
+                            log.debug("Loaded document: {} ({})", p.getFileName(), type);
                         } catch (Exception e) {
                             log.warn("Failed to load document: {}", p, e);
                         }
                     }
                 }
             } else {
-                Document doc = FileSystemDocumentLoader.loadDocument(path.toString(), new TextDocumentParser());
-                doc.metadata().put("source", path.getFileName().toString());
-                doc.metadata().put("type", getFileType(path.toString()));
-                documents.add(doc);
+                String content = Files.readString(path);
+                String type = getFileType(path.toString());
+                documents.add(new DocumentInfo(path.toString(), content, type, path.getFileName().toString()));
             }
 
             if (documents.isEmpty()) {
@@ -99,23 +99,16 @@ public class KnowledgeBaseTool implements AgentTool {
                 return;
             }
 
-            EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
-                    .embeddingModel(embeddingModel)
-                    .embeddingStore(embeddingStore)
-                    .documentSplitter(DocumentSplitters.recursive(500, 50))
-                    .build();
-
-            ingestor.ingest(documents);
-
             this.isInitialized = true;
             this.documentCount = documents.size();
             this.indexedPath = knowledgeBasePath;
+            
+            long javaCount = documents.stream().filter(d -> "java".equals(d.type)).count();
+            long mdCount = documents.stream().filter(d -> "markdown".equals(d.type)).count();
+            long otherCount = documentCount - javaCount - mdCount;
+            
             log.info("Knowledge base initialized with {} documents (Java: {}, Markdown: {}, Other: {})",
-                    documents.size(),
-                    documents.stream().filter(d -> "java".equals(d.metadata().getString("type"))).count(),
-                    documents.stream().filter(d -> "markdown".equals(d.metadata().getString("type"))).count(),
-                    documents.stream().filter(d -> "other".equals(d.metadata().getString("type"))).count()
-            );
+                    documentCount, javaCount, mdCount, otherCount);
 
         } catch (Exception e) {
             log.error("Failed to initialize knowledge base", e);
@@ -147,6 +140,7 @@ public class KnowledgeBaseTool implements AgentTool {
             sb.append("Indexed Path: ").append(indexedPath).append("\n");
             sb.append("Document Count: ").append(documentCount).append("\n");
             sb.append("Supported Types: ").append(String.join(", ", SUPPORTED_EXTENSIONS)).append("\n");
+            sb.append("Note: Using keyword-based search (embedding disabled)\n");
         } else {
             sb.append("Status: Not initialized. Use -kb <path> to specify a knowledge base.\n");
         }
@@ -156,7 +150,7 @@ public class KnowledgeBaseTool implements AgentTool {
         return result;
     }
 
-    @Tool("Search for information in the knowledge base. Use this to find existing unit test examples, coding guidelines, or project-specific patterns to ensure generated tests match the project style.")
+    @Tool("Search for information in the knowledge base using keywords")
     public String searchKnowledge(
             @P("Search query or keywords") String query,
             @P("Optional: filter by document type (java/markdown/xml/yaml/all). Default: all") String filterType
@@ -167,14 +161,7 @@ public class KnowledgeBaseTool implements AgentTool {
         }
 
         try {
-            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(embeddingModel.embed(query).content())
-                    .maxResults(5) // Increased from 3 to 5
-                    .build();
-
-            EmbeddingSearchResult<TextSegment> searchResult = embeddingStore.search(request);
-            List<EmbeddingMatch<TextSegment>> relevant = searchResult.matches();
-
+            String[] keywords = query.toLowerCase().split("\\s+");
             StringBuilder result = new StringBuilder();
             result.append("Knowledge Base Results for: ").append(query).append("\n");
             if (filterType != null && !"all".equalsIgnoreCase(filterType)) {
@@ -183,25 +170,36 @@ public class KnowledgeBaseTool implements AgentTool {
             result.append("\n");
 
             boolean found = false;
-            for (EmbeddingMatch<TextSegment> match : relevant) {
-                if (match.score() > 0.5) { // Lowered threshold from 0.6 to 0.5
-                    // Apply type filter if specified
-                    String docType = match.embedded().metadata().getString("type");
-                    if (filterType != null && !"all".equalsIgnoreCase(filterType) && !filterType.equalsIgnoreCase(docType)) {
-                        continue;
+            for (DocumentInfo doc : documents) {
+                // 类型过滤
+                if (filterType != null && !"all".equalsIgnoreCase(filterType) && !filterType.equalsIgnoreCase(doc.type)) {
+                    continue;
+                }
+                
+                // 关键词匹配
+                String lowerContent = doc.content.toLowerCase();
+                int matchCount = 0;
+                for (String keyword : keywords) {
+                    if (lowerContent.contains(keyword)) {
+                        matchCount++;
                     }
-                    
+                }
+                
+                // 如果至少一半的关键词匹配
+                if (matchCount >= Math.max(1, keywords.length / 2)) {
                     found = true;
-                    String source = match.embedded().metadata().getString("source");
-                    result.append("--- Source: ").append(source != null ? source : "unknown");
-                    result.append(" | Type: ").append(docType != null ? docType : "unknown");
-                    result.append(" | Relevance: ").append(String.format("%.2f", match.score())).append(" ---\n");
-                    result.append(match.embedded().text()).append("\n\n");
+                    result.append("--- Source: ").append(doc.fileName);
+                    result.append(" | Type: ").append(doc.type);
+                    result.append(" | Match: ").append(matchCount).append("/").append(keywords.length).append(" ---\n");
+                    
+                    // 提取包含关键词的相关片段
+                    String snippet = extractRelevantSnippet(doc.content, keywords);
+                    result.append(snippet).append("\n\n");
                 }
             }
 
             if (!found) {
-                String noResultsMsg = "No relevant information found in knowledge base (score < 0.5).";
+                String noResultsMsg = "No relevant information found in knowledge base for: " + query;
                 log.info("Tool Output - searchKnowledge: {}", noResultsMsg);
                 return noResultsMsg;
             }
@@ -214,6 +212,46 @@ public class KnowledgeBaseTool implements AgentTool {
             log.error("Error searching knowledge base", e);
             return "Error searching knowledge base: " + e.getMessage();
         }
+    }
+
+    /**
+     * 提取包含关键词的相关片段
+     */
+    private String extractRelevantSnippet(String content, String[] keywords) {
+        String[] lines = content.split("\n");
+        StringBuilder snippet = new StringBuilder();
+        int maxSnippetLines = 15;
+        int addedLines = 0;
+        
+        for (int i = 0; i < lines.length && addedLines < maxSnippetLines; i++) {
+            String lowerLine = lines[i].toLowerCase();
+            for (String keyword : keywords) {
+                if (lowerLine.contains(keyword)) {
+                    // 添加上下文（前后各1行）
+                    if (i > 0 && addedLines < maxSnippetLines) {
+                        snippet.append(lines[i - 1]).append("\n");
+                        addedLines++;
+                    }
+                    if (addedLines < maxSnippetLines) {
+                        snippet.append(lines[i]).append("\n");
+                        addedLines++;
+                    }
+                    if (i < lines.length - 1 && addedLines < maxSnippetLines) {
+                        snippet.append(lines[i + 1]).append("\n");
+                        addedLines++;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if (snippet.length() == 0) {
+            // 返回文档开头
+            int endIndex = Math.min(content.length(), 500);
+            return content.substring(0, endIndex) + "...";
+        }
+        
+        return snippet.toString();
     }
 
     // Internal helper - delegates to the full method

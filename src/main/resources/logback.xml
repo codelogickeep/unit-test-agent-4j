@@ -24,8 +24,8 @@
     <logger name="com.codelogickeep.agent.ut.tools" level="${ut.agent.log.level:-INFO}" />
     <logger name="com.codelogickeep.agent.ut.engine" level="${ut.agent.log.level:-INFO}" />
     
-    <!-- Custom framework - DEBUG level for troubleshooting -->
-    <logger name="com.codelogickeep.agent.ut.framework" level="${ut.framework.log.level:-DEBUG}" />
+    <!-- Custom framework - INFO level by default -->
+    <logger name="com.codelogickeep.agent.ut.framework" level="${ut.framework.log.level:-INFO}" />
     
     <!-- LangChain4j framework - 可通过 -Dllm.log.requests=true 启用 DEBUG -->
     <logger name="dev.langchain4j" level="${llm.log.level:-WARN}" />

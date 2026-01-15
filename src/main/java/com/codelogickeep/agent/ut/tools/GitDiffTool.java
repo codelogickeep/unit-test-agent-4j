@@ -1,8 +1,8 @@
 package com.codelogickeep.agent.ut.tools;
 
 import com.codelogickeep.agent.ut.exception.AgentToolException;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+import com.codelogickeep.agent.ut.framework.annotation.P;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

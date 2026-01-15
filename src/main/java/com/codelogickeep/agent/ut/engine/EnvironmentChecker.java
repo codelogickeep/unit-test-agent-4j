@@ -8,9 +8,6 @@ import com.codelogickeep.agent.ut.framework.model.Message;
 import com.codelogickeep.agent.ut.framework.model.UserMessage;
 import com.codelogickeep.agent.ut.tools.JdtLsManager;
 
-import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,11 +19,13 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 环境检查器
+ */
 public class EnvironmentChecker {
     private static final Logger log = LoggerFactory.getLogger(EnvironmentChecker.class);
 
@@ -39,6 +38,7 @@ public class EnvironmentChecker {
 
     /**
      * 检查环境并返回是否可以继续执行
+     * 
      * @return true 如果环境检查通过（至少 LLM 配置正确），false 否则
      */
     public static boolean check(AppConfig config, String projectRoot) {
@@ -79,7 +79,8 @@ public class EnvironmentChecker {
             System.out.println("    1. API Key is correct and valid");
             System.out.println("    2. Protocol matches your LLM provider:");
             System.out.println("       - 'openai' for OpenAI GPT models");
-            System.out.println("       - 'openai-zhipu' for Zhipu GLM Coding Plan (baseUrl: https://open.bigmodel.cn/api/coding/paas/v4)");
+            System.out.println(
+                    "       - 'openai-zhipu' for Zhipu GLM Coding Plan (baseUrl: https://open.bigmodel.cn/api/coding/paas/v4)");
             System.out.println("       - 'anthropic' for Claude models");
             System.out.println("       - 'gemini' for Google Gemini");
             System.out.println("    3. Model name is correct for your provider");
@@ -92,32 +93,32 @@ public class EnvironmentChecker {
             System.out.println("\n>>> Please fix the CRITICAL issues above before running the agent.");
             return false;
         }
-        
+
         if (projectRoot != null && !projectOk) {
             System.out.println("\n>>> WARNING: Project has missing or outdated recommended dependencies.");
             System.out.println("    The Agent will attempt to fix pom.xml automatically during execution.");
         } else {
             System.out.println("\n>>> Environment is ready!");
         }
-        
+
         return true;
     }
-    
+
     /**
      * 检查 LSP 服务 (JDT Language Server) 可用性
      * 自动下载如果未安装
      */
     private static boolean checkLsp(AppConfig config) {
         // 检查配置中是否启用了 LSP
-        boolean lspEnabled = config.getWorkflow() != null && 
-                             config.getWorkflow().isUseLsp();
-        
+        boolean lspEnabled = config.getWorkflow() != null &&
+                config.getWorkflow().isUseLsp();
+
         if (!lspEnabled) {
             System.out.print("Checking LSP Server (JDT LS)... ");
             System.out.println("SKIPPED (LSP not enabled in config, use 'use-lsp: true' to enable)");
             return true;
         }
-        
+
         System.out.print("Checking LSP Server (JDT LS)... ");
         try {
             JdtLsManager manager = new JdtLsManager();
@@ -174,8 +175,10 @@ public class EnvironmentChecker {
                 return true;
             } else {
                 System.out.println("WARNING");
-                if (!missing.isEmpty()) System.out.println("  Missing components: " + String.join(", ", missing));
-                if (!outdated.isEmpty()) System.out.println("  Outdated components: " + String.join(", ", outdated));
+                if (!missing.isEmpty())
+                    System.out.println("  Missing components: " + String.join(", ", missing));
+                if (!outdated.isEmpty())
+                    System.out.println("  Outdated components: " + String.join(", ", outdated));
                 return false;
             }
         } catch (IOException e) {
@@ -186,30 +189,34 @@ public class EnvironmentChecker {
 
     private static String extractVersion(String pomContent, String artifactId) {
         // Look for <artifactId>... followed by <version>...
-        String regex = "<artifactId>" + Pattern.quote(artifactId) + "</artifactId>\\s*(?:<[^>]*>\\s*)*<version>([^<]+)</version>";
+        String regex = "<artifactId>" + Pattern.quote(artifactId)
+                + "</artifactId>\\s*(?:<[^>]*>\\s*)*<version>([^<]+)</version>";
         Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(pomContent);
         if (matcher.find()) {
             return matcher.group(1).trim();
         }
-        
+
         // Also look for properties like <jacoco.version> if version is a placeholder
         // This is a simplified check
         return null;
     }
 
     private static boolean isVersionLower(String current, String required) {
-        if (current.startsWith("${") || required.startsWith("${")) return false; // Skip property placeholders
-        
+        if (current.startsWith("${") || required.startsWith("${"))
+            return false; // Skip property placeholders
+
         String[] v1 = current.split("[\\.\\-]");
         String[] v2 = required.split("[\\.\\-]");
-        
+
         int length = Math.max(v1.length, v2.length);
         for (int i = 0; i < length; i++) {
             int n1 = i < v1.length ? tryParseInt(v1[i]) : 0;
             int n2 = i < v2.length ? tryParseInt(v2[i]) : 0;
-            if (n1 < n2) return true;
-            if (n1 > n2) return false;
+            if (n1 < n2)
+                return true;
+            if (n1 > n2)
+                return false;
         }
         return false;
     }
@@ -260,72 +267,20 @@ public class EnvironmentChecker {
                 System.out.println("FAILED (Missing API Key)");
                 return false;
             }
-            
-            // 优先使用自研框架进行检查
-            if (config.getWorkflow() != null && config.getWorkflow().isUseSimpleFramework()) {
-                return checkLlmWithSimpleFramework(config);
-            }
-            
-            // 使用 LangChain4j 检查
-            LlmClient llmClient = new LlmClient(config.getLlm());
-            StreamingChatModel model = llmClient.createStreamingModel();
-            
-            CountDownLatch latch = new CountDownLatch(1);
-            final boolean[] success = {false};
-            final String[] error = {null};
 
-            model.chat("ping", new StreamingChatResponseHandler() {
-                @Override
-                public void onPartialResponse(String token) {}
-
-                @Override
-                public void onCompleteResponse(ChatResponse response) {
-                    success[0] = true;
-                    latch.countDown();
-                }
-
-                @Override
-                public void onError(Throwable t) {
-                    error[0] = (t.getMessage() != null && !t.getMessage().isEmpty()) ? t.getMessage() : t.toString();
-                    latch.countDown();
-                }
-            });
-
-            if (latch.await(60, TimeUnit.SECONDS)) {
-                if (success[0]) {
-                    System.out.println("OK (Configuration is valid and LLM is reachable)");
-                    return true;
-                } else {
-                    System.out.println("FAILED (" + error[0] + ")");
-                    return false;
-                }
-            } else {
-                System.out.println("FAILED (Timed out waiting for LLM response)");
-                return false;
-            }
-        } catch (Exception e) {
-            System.out.println("FAILED (" + e.getMessage() + ")");
-            return false;
-        }
-    }
-    
-    /**
-     * 使用自研框架检查 LLM
-     */
-    private static boolean checkLlmWithSimpleFramework(AppConfig config) {
-        try {
+            // 使用自研框架进行检查
             LlmAdapter adapter = LlmAdapterFactory.create(config.getLlm());
-            
+
             log.info("Using {} for LLM check", adapter.getName());
-            
+
             // 简单的 ping 测试
             List<Message> messages = new ArrayList<>();
             messages.add(new UserMessage("ping"));
-            
+
             AssistantMessage response = adapter.chat(messages, null);
-            
+
             if (response != null && (response.content() != null || response.hasToolCalls())) {
-                System.out.println("OK (Custom framework - " + adapter.getName() + ")");
+                System.out.println("OK (" + adapter.getName() + ")");
                 return true;
             } else {
                 System.out.println("FAILED (Empty response from LLM)");

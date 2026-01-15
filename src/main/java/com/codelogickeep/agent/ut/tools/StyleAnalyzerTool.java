@@ -9,8 +9,8 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+import com.codelogickeep.agent.ut.framework.annotation.P;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

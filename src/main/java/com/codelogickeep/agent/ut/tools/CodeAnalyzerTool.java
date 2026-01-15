@@ -18,8 +18,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+import com.codelogickeep.agent.ut.framework.annotation.P;
+import com.codelogickeep.agent.ut.framework.annotation.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

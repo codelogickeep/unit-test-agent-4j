@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 /**
  * Agent 执行器 - 核心 ReAct 循环
@@ -31,12 +32,22 @@ public class AgentExecutor {
     private final int maxIterations;
     private final long timeoutMs;
     
+    // Token 统计回调: (promptTokens, responseTokens)
+    private BiConsumer<Integer, Integer> tokenStatsCallback;
+    
     private AgentExecutor(Builder builder) {
         this.llmAdapter = builder.llmAdapter;
         this.toolRegistry = builder.toolRegistry;
         this.contextManager = builder.contextManager;
         this.maxIterations = builder.maxIterations;
         this.timeoutMs = builder.timeoutMs;
+    }
+    
+    /**
+     * 设置 Token 统计回调
+     */
+    public void setTokenStatsCallback(BiConsumer<Integer, Integer> callback) {
+        this.tokenStatsCallback = callback;
     }
     
     /**
@@ -66,10 +77,21 @@ public class AgentExecutor {
                 log.debug("Iteration #{}", iteration);
                 
                 // 1. 调用 LLM
+                // 估算提示词 Token（简单按字符数 / 4 估算）
+                int estimatedPromptTokens = estimateTokens(contextManager.getMessages());
+                
                 AssistantMessage response = llmAdapter.chat(
                         contextManager.getMessages(),
                         toolRegistry.getDefinitions()
                 );
+                
+                // 估算响应 Token
+                int estimatedResponseTokens = response.content() != null ? response.content().length() / 4 : 0;
+                
+                // 回调统计
+                if (tokenStatsCallback != null) {
+                    tokenStatsCallback.accept(estimatedPromptTokens, estimatedResponseTokens);
+                }
                 
                 // 2. 记录响应
                 contextManager.addMessage(response);
@@ -217,6 +239,19 @@ public class AgentExecutor {
      */
     public ToolRegistry getToolRegistry() {
         return toolRegistry;
+    }
+    
+    /**
+     * 估算消息列表的 Token 数（简单估算：字符数 / 4）
+     */
+    private int estimateTokens(List<Message> messages) {
+        int totalChars = 0;
+        for (Message msg : messages) {
+            if (msg.content() != null) {
+                totalChars += msg.content().length();
+            }
+        }
+        return totalChars / 4;
     }
     
     // ==================== Builder ====================

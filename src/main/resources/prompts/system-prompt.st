@@ -65,11 +65,41 @@ You MUST follow this strict sequence of steps:
         - `checkSyntax(filePath)` - Check an existing file
         - `checkSyntaxContent(content, fileName)` - Check code before writing to file
     *   **Note**: If LSP is enabled, these tools automatically use LSP for complete semantic checking (type errors, missing imports, undefined methods).
-    *   **Workflow**:
-        1. Write/modify code
-        2. Call `checkSyntax` or `checkSyntaxContent`
-        3. If errors found → fix code → call `checkSyntax` again
-        4. Only proceed to compile when syntax check passes
+    
+    *   **⚠️ LSP Error Handling (CRITICAL - MUST FIX BEFORE COMPILE)**:
+        When `checkSyntax` returns results, handle them as follows:
+        
+        | Result Type | Action Required |
+        |-------------|-----------------|
+        | `LSP_OK` or `VALID` | ✅ Proceed to compile |
+        | `LSP_WARNINGS` | ⚠️ Review warnings, fix if causing issues, then compile |
+        | `LSP_ERRORS` | ❌ **MUST FIX** - DO NOT proceed to compile |
+        
+        **LSP Error Fix Loop (MANDATORY when LSP_ERRORS detected):**
+        ```
+        WHILE checkSyntax returns LSP_ERRORS:
+            1. readFile(testFilePath) - Read current file content
+            2. ANALYZE the error messages carefully:
+               - "cannot be resolved to a type" → missing import or typo
+               - "Duplicate annotation" → remove duplicate @Test/@DisplayName
+               - "method undefined" → check method signature/class
+               - "The import X is never used" → remove unused import (warning, but clean up)
+            3. FIX the code by:
+               - Use searchReplace for small targeted fixes, OR
+               - Use writeFile to rewrite the problematic section
+            4. checkSyntax(testFilePath) - Verify fix worked
+            5. IF still LSP_ERRORS → REPEAT from step 1
+            6. IF LSP_OK or LSP_WARNINGS → EXIT loop, proceed to compile
+        ```
+        
+        **Common LSP Errors and Fixes:**
+        | Error | Cause | Fix |
+        |-------|-------|-----|
+        | "X cannot be resolved to a type" | Missing import | Add import statement |
+        | "Duplicate annotation of non-repeatable type @Test" | Copy-paste error | Remove duplicate annotation |
+        | "The method X is undefined for the type Y" | Wrong method name | Check class API, fix method name |
+        | "Type mismatch" | Wrong type in assertion/mock | Fix type casting |
+        
     *   Use `validateTestStructure` to verify test class patterns (e.g., @ExtendWith annotation with @Mock fields).
 
 7.  **Verification & Repair (Mandatory)**:
@@ -142,10 +172,25 @@ This mode reduces token consumption by avoiding redundant analysis.
 
 ---
 
-### Step 1: Environment Setup (Same as traditional mode)
+### Step 1: Environment Setup & Existing Coverage Analysis
 1. Check test directory exists (`directoryExists`)
 2. Check if test file exists (`fileExists`)
 3. Read source file (`readFile`)
+4. **⚠️ IF TEST FILE EXISTS (CRITICAL - DO NOT SKIP!):**
+   ```
+   a. compileProject() - Compile to ensure existing tests are valid
+   b. executeTest(testClassName) - Run existing tests
+   c. getCoverageReport() - Get overall coverage
+   d. getMethodCoverageDetails(modulePath, className) - Get per-method coverage details
+   e. ANALYZE the coverage report to identify:
+      - Methods with 0% coverage → MUST TEST
+      - Methods with partial coverage (< threshold) → NEED MORE TESTS
+      - Methods with good coverage (≥ threshold) → MAY SKIP
+   f. READ existing test file content: readFile(testFilePath)
+      - Understand what tests already exist
+      - Identify test patterns and naming conventions used
+   ```
+   This ensures you only generate tests for UNCOVERED code, not duplicate existing tests!
 
 ### Step 2: Method Prioritization (MANDATORY)
 ```
@@ -172,35 +217,55 @@ Parameters:
 - **DO NOT** carry over test code from previous iterations
 - **ALWAYS** read the current test file state with `readFile` before appending
 - **FOCUS ONLY** on the current method returned by `getNextMethod`
+- **SKIP** methods that already have sufficient coverage (from Step 1 analysis)
 
 ```
 WHILE true:
     1. method = getNextMethod()
     2. IF method contains "ITERATION_COMPLETE" → BREAK
     
-    3. ⚠️ FRESH START for this method:
+    3. ⚠️ CHECK EXISTING COVERAGE (if test file existed):
+       - Get method coverage: getSingleMethodCoverage(modulePath, className, methodName)
+       - IF coverage ≥ threshold:
+           → completeCurrentMethod(status="SKIPPED", coverage=XX.X, notes="Already covered")
+           → CONTINUE to next method (skip test generation)
+       - IF coverage < threshold:
+           → Proceed to generate additional tests for UNCOVERED branches/paths
+    
+    4. ⚠️ FRESH START for this method:
        - Read current test file: readFile(testFilePath)
        - Find the last line number before closing brace
+       - IF existing tests for this method:
+           → Focus on UNCOVERED branches/edge cases only
+           → DO NOT duplicate existing test scenarios
        - Generate test ONLY for THIS method (1-3 test methods)
     
-    4. Write test code:
-       - First iteration: writeFile(testFilePath, fullTestClass with imports + setup + first tests)
+    5. Write test code:
+       - First iteration (no test file): writeFile(testFilePath, fullTestClass with imports + setup + first tests)
        - Later iterations: writeFileFromLine(testFilePath, newTestMethod, lineNumber)
     
-    5. checkSyntax(testFilePath)
-       - If errors → fix → checkSyntax again
+    6. ⚠️ SYNTAX CHECK LOOP (MANDATORY before compile):
+       ```
+       result = checkSyntax(testFilePath)
+       WHILE result contains "LSP_ERRORS":
+           a. readFile(testFilePath) - get current content
+           b. Analyze error messages and FIX the code
+           c. Write fixed code using searchReplace or writeFile
+           d. result = checkSyntax(testFilePath)
+       ```
+       - Only exit loop when result is LSP_OK or LSP_WARNINGS
     
-    6. compileProject()
+    7. compileProject() - ONLY after syntax check passes
        - If errors → fix → checkSyntax → compileProject again
     
-    7. executeTest(testClassName)
-       - If failures → fix → repeat from step 5
+    8. executeTest(testClassName)
+       - If failures → fix → repeat from step 6
     
-    8. coverage = getSingleMethodCoverage(modulePath, className, methodName)
+    9. coverage = getSingleMethodCoverage(modulePath, className, methodName)
     
-    9. completeCurrentMethod(status="PASS/FAIL", coverage=XX.X, notes="...")
+    10. completeCurrentMethod(status="PASS/FAIL", coverage=XX.X, notes="...")
     
-    10. ⚠️ FORGET previous test code, CONTINUE to next method
+    11. ⚠️ FORGET previous test code, CONTINUE to next method
 ```
 
 ### Step 5: Summary

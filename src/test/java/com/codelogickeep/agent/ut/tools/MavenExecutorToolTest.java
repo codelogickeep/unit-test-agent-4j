@@ -105,14 +105,14 @@ class MavenExecutorToolTest {
         @DisplayName("compileProject method should be annotated with @Tool")
         void compileProject_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = MavenExecutorTool.class.getMethod("compileProject");
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
         @DisplayName("executeTest method should be annotated with @Tool")
         void executeTest_shouldHaveToolAnnotation() throws NoSuchMethodException {
             var method = MavenExecutorTool.class.getMethod("executeTest", String.class);
-            assertTrue(method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class));
+            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
         }
 
         @Test
@@ -121,7 +121,7 @@ class MavenExecutorToolTest {
             var method = MavenExecutorTool.class.getMethod("executeTest", String.class);
             var params = method.getParameters();
             assertEquals(1, params.length);
-            assertTrue(params[0].isAnnotationPresent(dev.langchain4j.agent.tool.P.class));
+            assertTrue(params[0].isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.P.class));
         }
     }
 
