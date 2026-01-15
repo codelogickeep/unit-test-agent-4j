@@ -859,11 +859,11 @@ flowchart TB
 
     subgraph Orchestrator["🎯 Agent Orchestrator"]
         SAO[SimpleAgentOrchestrator]
+        CFE[CoverageFeedbackEngine<br/>Coverage Feedback]
         RE[RetryExecutor<br/>Exponential Backoff]
         SH[StreamingHandler<br/>Real-time Output]
-        RT[RepairTracker<br/>Avoid Loops]
         DPB[DynamicPromptBuilder<br/>Context-aware Prompts]
-        SAO --> RE & SH & RT & DPB
+        SAO --> CFE & RE & SH & DPB
     end
 
     subgraph Tools["🛠️ Tool Layer"]
@@ -913,6 +913,7 @@ flowchart TB
 | **Audit** | EnvironmentChecker | Validates JDK, Maven, LSP, LLM availability |
 | **Framework** | Custom Agent Framework | Lightweight ReAct loop with multi-LLM support |
 | **Orchestrator** | SimpleAgentOrchestrator | Core loop with retry and streaming |
+| **Feedback** | CoverageFeedbackEngine | Intelligent coverage analysis and improvement suggestions |
 | **Tools** | 15+ Tools | File, Code, Build, Git, Coverage operations |
 
 ### Custom Framework vs LangChain4j
