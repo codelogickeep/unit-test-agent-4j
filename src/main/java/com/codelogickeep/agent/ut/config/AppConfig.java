@@ -79,8 +79,6 @@ public class AppConfig {
         private int methodCoverageThreshold = 80; // 单个方法覆盖率阈值
         @JsonProperty("skip-low-priority")
         private boolean skipLowPriority = false; // 是否跳过低优先级方法 (P2)
-        @JsonProperty("use-simple-framework")
-        private boolean useSimpleFramework = false; // 是否使用自研轻量级框架（替代 LangChain4j）
     }
     
     @Data

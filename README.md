@@ -392,7 +392,6 @@ workflow:
   iterative-mode: true          # Enable per-method iteration
   method-coverage-threshold: 80 # Per-method threshold
   skip-low-priority: false      # Skip getters/setters if coverage is met
-  use-simple-framework: true    # Use custom lightweight framework
 ```
 
 **Benefits:**
@@ -591,9 +590,6 @@ workflow:
   
   # Skip low-priority methods (getters/setters) when coverage met
   skip-low-priority: false
-  
-  # Use custom lightweight framework (recommended for Zhipu AI)
-  use-simple-framework: true
 
 # ═══════════════════════════════════════════════════════════════════
 # Batch Mode Settings
@@ -693,9 +689,6 @@ llm:
   apiKey: "your-zhipu-api-key"
   modelName: "glm-4.7"
   baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4"
-
-workflow:
-  use-simple-framework: true  # Recommended for Zhipu AI
 ```
 
 #### Anthropic (Claude)
@@ -966,8 +959,7 @@ mvn clean test jacoco:report
 
 **Solution:**
 - Upgrade to v1.1.0
-- Use `use-simple-framework: true` in config
-- The custom framework handles Zhipu AI message format correctly
+- The custom framework (default since v1.1.0) handles Zhipu AI message format correctly
 
 #### 6. Test Compilation Fails
 
