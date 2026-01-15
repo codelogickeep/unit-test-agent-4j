@@ -1,6 +1,7 @@
 package com.codelogickeep.agent.ut.framework;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
+import com.codelogickeep.agent.ut.engine.CoverageFeedbackEngine;
 import com.codelogickeep.agent.ut.framework.adapter.LlmAdapter;
 import com.codelogickeep.agent.ut.framework.adapter.LlmAdapterFactory;
 import com.codelogickeep.agent.ut.framework.executor.AgentExecutor;
@@ -8,6 +9,9 @@ import com.codelogickeep.agent.ut.framework.executor.AgentResult;
 import com.codelogickeep.agent.ut.framework.executor.ConsoleStreamingHandler;
 import com.codelogickeep.agent.ut.framework.model.IterationStats;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
+import com.codelogickeep.agent.ut.tools.BoundaryAnalyzerTool;
+import com.codelogickeep.agent.ut.tools.CoverageTool;
+import com.codelogickeep.agent.ut.tools.MutationTestTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +49,9 @@ public class SimpleAgentOrchestrator {
 
     // 迭代统计
     private IterationStats iterationStats;
+    
+    // 覆盖率反馈引擎
+    private CoverageFeedbackEngine feedbackEngine;
 
     public SimpleAgentOrchestrator(AppConfig config, List<Object> tools) {
         this.config = config;
@@ -53,7 +60,36 @@ public class SimpleAgentOrchestrator {
         this.toolRegistry.registerAll(tools);
         this.maxIterations = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() * 10 : 50;
 
+        // 初始化覆盖率反馈引擎
+        initFeedbackEngine(tools);
+
         log.info("SimpleAgentOrchestrator initialized with {} tools", toolRegistry.size());
+    }
+    
+    /**
+     * 初始化覆盖率反馈引擎
+     */
+    private void initFeedbackEngine(List<Object> tools) {
+        CoverageTool coverageTool = null;
+        BoundaryAnalyzerTool boundaryTool = null;
+        MutationTestTool mutationTool = null;
+        
+        for (Object tool : tools) {
+            if (tool instanceof CoverageTool) {
+                coverageTool = (CoverageTool) tool;
+            } else if (tool instanceof BoundaryAnalyzerTool) {
+                boundaryTool = (BoundaryAnalyzerTool) tool;
+            } else if (tool instanceof MutationTestTool) {
+                mutationTool = (MutationTestTool) tool;
+            }
+        }
+        
+        if (coverageTool != null && boundaryTool != null && mutationTool != null) {
+            this.feedbackEngine = new CoverageFeedbackEngine(coverageTool, boundaryTool, mutationTool);
+            log.info("CoverageFeedbackEngine initialized");
+        } else {
+            log.warn("CoverageFeedbackEngine not initialized - missing required tools");
+        }
     }
 
     // 预检查结果，供后续步骤使用
@@ -253,10 +289,10 @@ public class SimpleAgentOrchestrator {
                     if (error.getCause() != null) {
                         log.error("   Caused by: {}", error.getCause().getMessage());
                     }
-                    
+
                     methodRetryCount++;
                     log.warn("⏳ Retrying... attempt {}/{}", methodRetryCount + 1, maxMethodRetries);
-                    
+
                     if (methodRetryCount >= maxMethodRetries) {
                         log.error("❌ Max retries reached for method {}", methodInfo.methodName);
                         currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
@@ -271,13 +307,13 @@ public class SimpleAgentOrchestrator {
                     }
                     continue;
                 }
-                
+
                 // 检查响应是否为空
                 if (content == null || content.trim().isEmpty()) {
-                    log.warn("⚠️ Empty response for method {}, attempt {}/{}", 
+                    log.warn("⚠️ Empty response for method {}, attempt {}/{}",
                             methodInfo.methodName, methodRetryCount + 1, maxMethodRetries);
                     methodRetryCount++;
-                    
+
                     if (methodRetryCount >= maxMethodRetries) {
                         log.error("❌ Max retries reached (empty responses) for method {}", methodInfo.methodName);
                         currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
@@ -339,7 +375,8 @@ public class SimpleAgentOrchestrator {
      * 构建针对特定方法的提示词
      */
     private String buildTargetedMethodPrompt(String targetFile, MethodCoverageInfo methodInfo, int iteration) {
-        return String.format("""
+        StringBuilder prompt = new StringBuilder();
+        prompt.append(String.format("""
                 ## ITERATIVE MODE - METHOD #%d: %s
 
                 Target file: %s
@@ -352,6 +389,47 @@ public class SimpleAgentOrchestrator {
                 - Current Line Coverage: %.1f%%
                 - Current Branch Coverage: %.1f%%
 
+                """,
+                iteration, methodInfo.methodName,
+                targetFile,
+                methodInfo.methodName, methodInfo.priority,
+                methodInfo.lineCoverage, methodInfo.branchCoverage));
+        
+        // 添加覆盖率反馈建议（如果有）
+        if (currentPreCheck != null && currentPreCheck.getFeedbackResult() != null) {
+            CoverageFeedbackEngine.FeedbackResult feedback = currentPreCheck.getFeedbackResult();
+            List<CoverageFeedbackEngine.ImprovementSuggestion> suggestions = feedback.getImprovements();
+            
+            // 查找与当前方法相关的建议
+            List<CoverageFeedbackEngine.ImprovementSuggestion> methodSuggestions = suggestions.stream()
+                    .filter(s -> s.getMethodName() != null && s.getMethodName().contains(methodInfo.methodName))
+                    .limit(5)
+                    .collect(java.util.stream.Collectors.toList());
+            
+            if (!methodSuggestions.isEmpty()) {
+                prompt.append("**📊 Feedback Analysis Suggestions:**\n");
+                for (CoverageFeedbackEngine.ImprovementSuggestion s : methodSuggestions) {
+                    prompt.append(String.format("- [%s] %s\n", s.getPriority(), s.getDescription()));
+                }
+                prompt.append("\n");
+            }
+            
+            // 添加边界测试建议
+            List<CoverageFeedbackEngine.ImprovementSuggestion> boundarySuggestions = suggestions.stream()
+                    .filter(s -> s.getType() == CoverageFeedbackEngine.SuggestionType.BOUNDARY_TEST)
+                    .limit(3)
+                    .collect(java.util.stream.Collectors.toList());
+            
+            if (!boundarySuggestions.isEmpty()) {
+                prompt.append("**🎯 Boundary Test Suggestions:**\n");
+                for (CoverageFeedbackEngine.ImprovementSuggestion s : boundarySuggestions) {
+                    prompt.append(String.format("- %s\n", s.getDescription()));
+                }
+                prompt.append("\n");
+            }
+        }
+        
+        prompt.append(String.format("""
                 **Your Task:**
                 1. Read the current test file (readFile)
                 2. Analyze the source code for method `%s`
@@ -367,12 +445,9 @@ public class SimpleAgentOrchestrator {
                 - Error handling paths
 
                 After completing, STOP.
-                """,
-                iteration, methodInfo.methodName,
-                targetFile,
-                methodInfo.methodName, methodInfo.priority,
-                methodInfo.lineCoverage, methodInfo.branchCoverage,
-                methodInfo.methodName);
+                """, methodInfo.methodName));
+        
+        return prompt.toString();
     }
 
     /**
@@ -534,6 +609,15 @@ public class SimpleAgentOrchestrator {
             System.out.println("✅ 所有方法覆盖率已达标，无需生成新测试");
         }
 
+        // 输出覆盖率反馈历史
+        if (feedbackEngine != null) {
+            String feedbackSummary = feedbackEngine.getIterationSummary();
+            if (!feedbackSummary.startsWith("No feedback")) {
+                System.out.println("\n📈 覆盖率反馈历史:");
+                System.out.println(feedbackSummary);
+            }
+        }
+
         System.out.println("=".repeat(60));
 
         // 保存 Markdown 报告到 result 目录
@@ -541,6 +625,12 @@ public class SimpleAgentOrchestrator {
             Path resultDir = Paths.get(projectRoot, "result");
             try {
                 Files.createDirectories(resultDir);
+                
+                // 添加反馈历史到统计
+                if (feedbackEngine != null) {
+                    iterationStats.setFeedbackSummary(feedbackEngine.getIterationSummary());
+                }
+                
                 iterationStats.saveReport(resultDir);
             } catch (IOException e) {
                 log.error("Failed to create result directory: {}", e.getMessage());
@@ -837,6 +927,7 @@ public class SimpleAgentOrchestrator {
         String coverageInfo; // 覆盖率信息文本，传递给 LLM
         boolean hasExistingTests;
         List<MethodCoverageInfo> methodCoverages; // 每个方法的覆盖率
+        CoverageFeedbackEngine.FeedbackResult feedbackResult; // 覆盖率反馈分析结果
 
         static PreCheckResult success(String coverageInfo, boolean hasExistingTests,
                 List<MethodCoverageInfo> methodCoverages) {
@@ -866,6 +957,14 @@ public class SimpleAgentOrchestrator {
             return methodCoverages.stream()
                     .sorted((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()))
                     .collect(java.util.stream.Collectors.toList());
+        }
+        
+        void setFeedbackResult(CoverageFeedbackEngine.FeedbackResult result) {
+            this.feedbackResult = result;
+        }
+        
+        CoverageFeedbackEngine.FeedbackResult getFeedbackResult() {
+            return feedbackResult;
         }
     }
 
@@ -974,11 +1073,49 @@ public class SimpleAgentOrchestrator {
             System.out.println("⚠️ Could not analyze coverage: " + e.getMessage());
         }
 
+        // Step 4: 运行覆盖率反馈分析（如果可用）
+        CoverageFeedbackEngine.FeedbackResult feedbackResult = null;
+        if (feedbackEngine != null && coverageInfo != null) {
+            System.out.println("\n🔬 Step 4: Running coverage feedback analysis...");
+            try {
+                String className = extractClassName(targetFile);
+                int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
+                feedbackResult = feedbackEngine.runFeedbackCycle(projectRoot, className, threshold);
+                
+                if (feedbackResult != null) {
+                    System.out.println("✅ Feedback analysis complete:");
+                    System.out.println("   Current coverage: " + feedbackResult.getCurrentCoverage() + "%");
+                    System.out.println("   Target: " + feedbackResult.getTargetCoverage() + "%");
+                    System.out.println("   Status: " + (feedbackResult.isTargetMet() ? "✓ TARGET MET" : "✗ NOT MET"));
+                    
+                    if (!feedbackResult.isTargetMet()) {
+                        List<CoverageFeedbackEngine.ImprovementSuggestion> improvements = feedbackResult.getImprovements();
+                        if (!improvements.isEmpty()) {
+                            System.out.println("   Improvement suggestions:");
+                            for (int i = 0; i < Math.min(5, improvements.size()); i++) {
+                                CoverageFeedbackEngine.ImprovementSuggestion s = improvements.get(i);
+                                System.out.printf("   - [%s] %s: %s%n", s.getPriority(), s.getType(), s.getDescription());
+                            }
+                            if (improvements.size() > 5) {
+                                System.out.println("   ... and " + (improvements.size() - 5) + " more suggestions");
+                            }
+                        }
+                        System.out.println("   Recommended action: " + feedbackResult.getNextAction());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Feedback analysis failed: {}", e.getMessage());
+                System.out.println("⚠️ Feedback analysis failed: " + e.getMessage());
+            }
+        }
+
         System.out.println("\n" + "=".repeat(60));
         System.out.println("✅ Pre-check completed. Starting test generation...");
         System.out.println("=".repeat(60) + "\n");
 
-        return PreCheckResult.success(coverageInfo, hasExistingTests, methodCoverages);
+        PreCheckResult result = PreCheckResult.success(coverageInfo, hasExistingTests, methodCoverages);
+        result.setFeedbackResult(feedbackResult);
+        return result;
     }
 
     /**

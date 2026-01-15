@@ -18,10 +18,25 @@ public class IterationStats {
     private final List<MethodStats> methodStatsList = new ArrayList<>();
     private int totalPromptTokens = 0;
     private int totalResponseTokens = 0;
+    private String feedbackSummary; // 覆盖率反馈历史
 
     public IterationStats(String targetFile) {
         this.targetFile = targetFile;
         this.startTime = LocalDateTime.now();
+    }
+    
+    /**
+     * 设置覆盖率反馈历史摘要
+     */
+    public void setFeedbackSummary(String summary) {
+        this.feedbackSummary = summary;
+    }
+    
+    /**
+     * 获取覆盖率反馈历史摘要
+     */
+    public String getFeedbackSummary() {
+        return feedbackSummary;
     }
 
     /**
@@ -226,6 +241,14 @@ public class IterationStats {
                     }
                 }
             }
+        }
+
+        // 覆盖率反馈历史
+        if (feedbackSummary != null && !feedbackSummary.isEmpty() && !feedbackSummary.startsWith("No feedback")) {
+            sb.append("## 📈 覆盖率反馈历史\n\n");
+            sb.append("```\n");
+            sb.append(feedbackSummary);
+            sb.append("```\n\n");
         }
 
         sb.append("---\n");
