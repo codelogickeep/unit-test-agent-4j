@@ -113,19 +113,38 @@ public class DynamicPromptBuilder {
             context.append("- Interactive mode: Enabled (user will confirm file writes)\n");
         }
 
-        // 当 use-lsp 启用时，强制使用 LSP 进行语法检查
+        // 当 use-lsp 启用时，说明 checkSyntax 会自动使用 LSP
         if (workflow.isUseLsp()) {
-            context.append("\n### LSP SYNTAX CHECK (MANDATORY)\n");
+            context.append("\n### LSP SYNTAX CHECK (AUTO-ENABLED)\n");
             context.append("**IMPORTANT**: LSP is ENABLED and auto-initialized for this project.\n\n");
-            context.append("**YOU MUST USE LSP FOR ALL SYNTAX CHECKS:**\n");
-            context.append("1. Use `checkSyntaxWithLsp(filePath)` to check Java files AFTER writing them\n");
-            context.append("2. Use `checkContentWithLsp(content, targetPath)` to check code BEFORE writing to file\n");
-            context.append("3. LSP detects: type errors, missing imports, undefined methods, wrong signatures\n");
-            context.append("4. **DO NOT** use `checkSyntax` or `checkSyntaxContent` (JavaParser is insufficient)\n\n");
-            context.append("**WORKFLOW WITH LSP:**\n");
-            context.append("- Before writing test file: `checkContentWithLsp(testCode, testFilePath)` to validate\n");
-            context.append("- After writing test file: `checkSyntaxWithLsp(testFilePath)` to confirm no errors\n");
-            context.append("- Fix any LSP_ERRORS before running tests\n");
+            context.append("**SYNTAX CHECK AUTO-DELEGATION:**\n");
+            context.append("- `checkSyntax(filePath)` automatically uses LSP for complete semantic checking\n");
+            context.append("- `checkSyntaxContent(content, fileName)` automatically uses LSP for validation\n");
+            context.append("- LSP detects: type errors, missing imports, undefined methods, wrong signatures\n\n");
+            context.append("**WORKFLOW:**\n");
+            context.append("1. Write code → `checkSyntax` (uses LSP) → fix errors → compile → run tests\n");
+            context.append("2. Always fix LSP_ERRORS before running mvn compile\n");
+        }
+
+        // 迭代模式说明
+        if (workflow.isIterativeMode()) {
+            context.append("\n### ITERATIVE METHOD TESTING MODE (ENABLED)\n");
+            context.append("**IMPORTANT**: Generate tests ONE METHOD AT A TIME.\n\n");
+            context.append("**WORKFLOW:**\n");
+            context.append("1. Call `getPriorityMethods(sourcePath)` to analyze method priorities\n");
+            context.append("2. Call `initMethodIteration(sourcePath, modulePath, className, threshold)` to start\n");
+            context.append("3. Loop:\n");
+            context.append("   a. Call `getNextMethod()` to get next method\n");
+            context.append("   b. If ITERATION_COMPLETE → go to step 4\n");
+            context.append("   c. Generate test for THIS method only\n");
+            context.append("   d. checkSyntax → compile → run test → get coverage\n");
+            context.append("   e. Call `completeCurrentMethod(status, coverage, notes)`\n");
+            context.append("   f. Go back to step 3a\n");
+            context.append("4. Call `getIterationProgress()` for summary\n\n");
+            context.append("**Method coverage threshold**: ").append(workflow.getMethodCoverageThreshold()).append("%\n");
+            if (workflow.isSkipLowPriority()) {
+                context.append("**Low-priority (P2) methods will be SKIPPED** if overall coverage is met.\n");
+            }
         }
 
         return context.toString();

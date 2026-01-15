@@ -19,6 +19,9 @@ workflow:
   coverageThreshold: 80                   # Coverage threshold (%)
   interactive: false                      # Interactive confirmation mode
   # default-skill: "full"                 # Default skill name (null = use all tools)
+  iterative-mode: false                   # Enable iterative method testing mode
+  method-coverage-threshold: 80           # Per-method coverage threshold (%)
+  skip-low-priority: false                # Skip low-priority methods (P2) in iterative mode
 
 # Batch Mode Settings (for --project)
 batch:
@@ -90,6 +93,20 @@ skills:
       - CodeAnalyzerTool
       - SyntaxCheckerTool
       - MavenExecutorTool
+
+  # Iterative mode - per-method test generation
+  - name: "iterative"
+    description: "Iterative mode - generate tests method by method with priority"
+    tools:
+      - CodeAnalyzerTool
+      - CoverageTool
+      - MethodIteratorTool
+      - FileSystemTool
+      - DirectoryTool
+      - SyntaxCheckerTool
+      - MavenExecutorTool
+      - TestReportTool
+      - KnowledgeBaseTool
 
   # Full toolset (default) - use all available tools
   - name: "full"

@@ -122,6 +122,42 @@ In this mode, follow these optimized steps:
 
 This mode reduces token consumption by avoiding redundant analysis.
 
+### Iterative Method Testing Mode (iterative-mode)
+When iterative mode is enabled (`iterative-mode: true`), use the **per-method workflow**:
+
+**Initialization**:
+1. Call `getPriorityMethods` to analyze and prioritize all methods
+2. Call `initMethodIteration` to initialize the iteration queue
+
+**Iteration Loop** (repeat for each method):
+1. Call `getNextMethod` to get the next method to test
+2. If "ITERATION_COMPLETE" → go to Summary step
+3. **Generate**: Create test method(s) for THIS SPECIFIC method only
+4. **Syntax Check**: Call `checkSyntax` to verify the code
+5. If syntax errors → fix and retry step 4
+6. **Compile**: Call `compileProject`
+7. If compile errors → fix and retry step 4
+8. **Execute**: Call `executeTest` to run the test
+9. **Coverage**: Call `getSingleMethodCoverage` to check this method's coverage
+10. **Complete**: Call `completeCurrentMethod` with status (PASS/FAIL) and coverage
+11. Go back to step 1
+
+**Summary**:
+- Call `getIterationProgress` to report final status of all methods
+
+**Advantages of Iterative Mode**:
+- Immediate feedback per method
+- Easier to locate and fix errors
+- Can skip low-priority methods if coverage threshold is already met
+- Better token efficiency for large classes
+
+**Priority Classification**:
+- **P0 (Core)**: High complexity (≥5), public APIs, frequently called methods
+- **P1 (Standard)**: Medium complexity, public/protected methods
+- **P2 (Low)**: Getters, setters, simple constructors
+
+If coverage is already good, use `skipLowPriorityMethods` to skip P2 methods.
+
 ### Coverage Tools Reference
 | Tool | Purpose | When to Use |
 |------|---------|-------------|

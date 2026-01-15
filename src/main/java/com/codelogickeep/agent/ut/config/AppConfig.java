@@ -73,6 +73,12 @@ public class AppConfig {
         private boolean useLsp = false; // 是否使用 LSP 进行语法检查（默认使用 JavaParser）
         @JsonProperty("default-skill")
         private String defaultSkill; // 默认使用的 skill 名称，null 表示使用全部工具
+        @JsonProperty("iterative-mode")
+        private boolean iterativeMode = false; // 是否启用逐函数迭代模式
+        @JsonProperty("method-coverage-threshold")
+        private int methodCoverageThreshold = 80; // 单个方法覆盖率阈值
+        @JsonProperty("skip-low-priority")
+        private boolean skipLowPriority = false; // 是否跳过低优先级方法 (P2)
     }
     
     @Data

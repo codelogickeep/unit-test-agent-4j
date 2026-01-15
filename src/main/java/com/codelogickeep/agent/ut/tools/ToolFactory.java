@@ -60,6 +60,10 @@ public class ToolFactory {
     private static List<Object> loadAllTools(AppConfig appConfig, String knowledgeBasePath) {
         List<Object> tools = new ArrayList<>();
         
+        // 先创建基础工具的引用，用于依赖注入
+        CodeAnalyzerTool codeAnalyzerTool = null;
+        CoverageTool coverageTool = null;
+        
         // Scan for implementations of AgentTool
         Reflections reflections = new Reflections(new ConfigurationBuilder()
                 .setUrls(ClasspathHelper.forPackage("com.codelogickeep.agent.ut.tools"))
@@ -69,17 +73,26 @@ public class ToolFactory {
 
         // 检查是否启用 LSP
         boolean useLsp = appConfig.getWorkflow() != null && appConfig.getWorkflow().isUseLsp();
+        // 检查是否启用迭代模式
+        boolean iterativeMode = appConfig.getWorkflow() != null && appConfig.getWorkflow().isIterativeMode();
 
+        // 第一轮：实例化不需要依赖的工具
         for (Class<? extends AgentTool> clazz : toolClasses) {
             // Skip interfaces and abstract classes
             if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
                 continue;
             }
             
-            // 根据配置决定是否加载 LSP 相关工具
             String className = clazz.getSimpleName();
+            
+            // 根据配置决定是否加载 LSP 相关工具
             if (className.equals("LspSyntaxCheckerTool") && !useLsp) {
                 log.info("Skipping LspSyntaxCheckerTool (use-lsp not enabled in config)");
+                continue;
+            }
+            
+            // 跳过需要依赖注入的工具（第二轮处理）
+            if (className.equals("MethodIteratorTool")) {
                 continue;
             }
 
@@ -92,6 +105,14 @@ public class ToolFactory {
                 if (instance instanceof KnowledgeBaseTool) {
                     ((KnowledgeBaseTool) instance).init(appConfig, knowledgeBasePath);
                 }
+                
+                // 保存引用供后续依赖注入使用
+                if (instance instanceof CodeAnalyzerTool) {
+                    codeAnalyzerTool = (CodeAnalyzerTool) instance;
+                }
+                if (instance instanceof CoverageTool) {
+                    coverageTool = (CoverageTool) instance;
+                }
 
                 // Register Tool Directly (No Governance Proxy)
                 tools.add(instance);
@@ -100,6 +121,20 @@ public class ToolFactory {
             } catch (Exception e) {
                 log.error("Failed to instantiate tool: {}", clazz.getName(), e);
             }
+        }
+        
+        // 第二轮：创建需要依赖注入的工具
+        // MethodIteratorTool: 仅在迭代模式下加载
+        if (iterativeMode && codeAnalyzerTool != null && coverageTool != null) {
+            try {
+                MethodIteratorTool methodIteratorTool = new MethodIteratorTool(codeAnalyzerTool, coverageTool);
+                tools.add(methodIteratorTool);
+                log.info("Registered Tool: MethodIteratorTool (iterative mode enabled)");
+            } catch (Exception e) {
+                log.error("Failed to instantiate MethodIteratorTool", e);
+            }
+        } else if (iterativeMode) {
+            log.warn("MethodIteratorTool requires CodeAnalyzerTool and CoverageTool, but they are not available");
         }
         
         return tools;

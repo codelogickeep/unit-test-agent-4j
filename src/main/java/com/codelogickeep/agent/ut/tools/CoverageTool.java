@@ -437,4 +437,103 @@ public class CoverageTool implements AgentTool {
         }
         return null;
     }
+
+    @Tool("Get coverage for a single method (fast check for iterative testing)")
+    public String getSingleMethodCoverage(
+            @P("Path to the module directory") String modulePath,
+            @P("Fully qualified class name") String className,
+            @P("Method name to check (use 'constructor' for constructors)") String methodName) throws IOException {
+
+        log.info("Tool Input - getSingleMethodCoverage: modulePath={}, className={}, methodName={}", 
+                 modulePath, className, methodName);
+        Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
+        File xmlFile = reportPath.toFile();
+
+        if (!xmlFile.exists()) {
+            return "ERROR: No coverage report. Run 'mvn test jacoco:report' first.";
+        }
+
+        try {
+            Document doc = parseXml(xmlFile);
+            String packageName = className.contains(".") ? className.substring(0, className.lastIndexOf('.')) : "";
+            String simpleClassName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            Element targetClass = findClass(doc, packageName, simpleClassName);
+            if (targetClass == null) {
+                return "ERROR: Class not found: " + className;
+            }
+
+            // Convert method name for JaCoCo format
+            String jacocoMethodName = "constructor".equals(methodName) ? "<init>" : methodName;
+
+            NodeList methods = targetClass.getElementsByTagName("method");
+            for (int i = 0; i < methods.getLength(); i++) {
+                Element method = (Element) methods.item(i);
+                if (method.getParentNode() != targetClass) continue;
+
+                String name = method.getAttribute("name");
+                if (name.equals(jacocoMethodName) || 
+                    (methodName.contains("(") && name.equals(methodName.substring(0, methodName.indexOf("("))))) {
+                    
+                    double lineCov = calculateCoverage(method, "LINE");
+                    double branchCov = calculateCoverage(method, "BRANCH");
+                    String desc = method.getAttribute("desc");
+
+                    String displayName = "<init>".equals(name) ? "constructor" : name;
+                    String status = lineCov >= 80 ? "✓ PASS" : (lineCov > 0 ? "◐ PARTIAL" : "✗ NONE");
+
+                    String result = String.format(
+                            "Method: %s%s\nLine Coverage: %.1f%%\nBranch Coverage: %.1f%%\nStatus: %s",
+                            displayName, parseDescriptor(desc), lineCov, branchCov, status);
+                    log.info("Tool Output - getSingleMethodCoverage: {} line={:.1f}%", displayName, lineCov);
+                    return result;
+                }
+            }
+
+            return "ERROR: Method not found: " + methodName + " in class " + className;
+        } catch (Exception e) {
+            log.error("Failed to get single method coverage", e);
+            throw new IOException("Failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get single method coverage as double (for programmatic use)
+     */
+    public double getSingleMethodCoverageValue(String modulePath, String className, String methodName) throws IOException {
+        Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
+        File xmlFile = reportPath.toFile();
+
+        if (!xmlFile.exists()) {
+            return -1.0;
+        }
+
+        try {
+            Document doc = parseXml(xmlFile);
+            String packageName = className.contains(".") ? className.substring(0, className.lastIndexOf('.')) : "";
+            String simpleClassName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            Element targetClass = findClass(doc, packageName, simpleClassName);
+            if (targetClass == null) {
+                return -1.0;
+            }
+
+            String jacocoMethodName = "constructor".equals(methodName) ? "<init>" : methodName;
+
+            NodeList methods = targetClass.getElementsByTagName("method");
+            for (int i = 0; i < methods.getLength(); i++) {
+                Element method = (Element) methods.item(i);
+                if (method.getParentNode() != targetClass) continue;
+
+                String name = method.getAttribute("name");
+                if (name.equals(jacocoMethodName)) {
+                    return calculateCoverage(method, "LINE");
+                }
+            }
+            return -1.0;
+        } catch (Exception e) {
+            log.error("Failed to get single method coverage value", e);
+            return -1.0;
+        }
+    }
 }

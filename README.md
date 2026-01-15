@@ -251,6 +251,38 @@ java -jar utagent.jar \
   -i
 ```
 
+### Iterative Method Testing Mode
+
+Generate tests **one method at a time** with immediate feedback. Ideal for large classes.
+
+```bash
+# Enable iterative mode
+java -jar utagent.jar \
+  --config agent.yml \
+  --target path/to/LargeService.java
+```
+
+With `agent.yml`:
+```yaml
+workflow:
+  iterative-mode: true          # Enable per-method iteration
+  method-coverage-threshold: 80 # Per-method threshold
+  skip-low-priority: false      # Skip getters/setters if coverage is met
+```
+
+**Benefits:**
+- Immediate feedback per method
+- Easier error location and fixing
+- Better token efficiency for large classes
+- Priority-based testing (core functions first)
+
+**Method Priority Classification:**
+| Priority | Criteria | Examples |
+|----------|----------|----------|
+| P0 (Core) | Complexity ≥5, public APIs, frequently called | `processPayment()`, `validateOrder()` |
+| P1 (Standard) | Complexity 3-4, public/protected | `setConfig()`, `loadData()` |
+| P2 (Low) | Getters, setters, simple constructors | `getId()`, `setName()` |
+
 ### Skill-based Tool Selection
 
 Reduce token usage by loading only relevant tools for specific tasks.
@@ -280,7 +312,8 @@ java -jar utagent.jar \
 | `generation` | Test generation phase | 5 | ~65% |
 | `verification` | Test verification phase | 5 | ~65% |
 | `repair` | Fix failing tests | 5 | ~65% |
-| `full` | All tools (default) | 15 | baseline |
+| `iterative` | Per-method test generation | 9 | ~40% |
+| `full` | All tools (default) | 16 | baseline |
 
 **Interactive Prompts:**
 ```
