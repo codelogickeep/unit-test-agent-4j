@@ -68,7 +68,7 @@ public class CodeAnalyzerTool implements AgentTool {
         });
 
         String finalResult = result.toString();
-        log.debug("Tool Output - analyzeClass: length={}", finalResult.length());
+        log.info("Tool Output - analyzeClass: length={}", finalResult.length());
         return finalResult;
     }
 

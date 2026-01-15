@@ -485,12 +485,14 @@ public class CoverageTool implements AgentTool {
                     String result = String.format(
                             "Method: %s%s\nLine Coverage: %.1f%%\nBranch Coverage: %.1f%%\nStatus: %s",
                             displayName, parseDescriptor(desc), lineCov, branchCov, status);
-                    log.info("Tool Output - getSingleMethodCoverage: {} line={:.1f}%", displayName, lineCov);
+                    log.info("Tool Output - getSingleMethodCoverage: {} line={}%", displayName, String.format("%.1f", lineCov));
                     return result;
                 }
             }
 
-            return "ERROR: Method not found: " + methodName + " in class " + className;
+            String errorMsg = "ERROR: Method not found: " + methodName + " in class " + className;
+            log.info("Tool Output - getSingleMethodCoverage: {}", errorMsg);
+            return errorMsg;
         } catch (Exception e) {
             log.error("Failed to get single method coverage", e);
             throw new IOException("Failed: " + e.getMessage(), e);

@@ -162,22 +162,24 @@ public class MethodIteratorTool implements AgentTool {
         current.setStatus("IN_PROGRESS");
 
         StringBuilder result = new StringBuilder();
-        result.append("Next Method to Test\n");
+        result.append("═".repeat(50)).append("\n");
+        result.append("⚠️ NEW METHOD - FRESH START ⚠️\n");
         result.append("═".repeat(50)).append("\n");
         result.append("Progress: ").append(currentIndex + 1).append("/").append(methodQueue.size()).append("\n");
         result.append("─".repeat(50)).append("\n");
-        result.append("Method: ").append(current.getSignature()).append("\n");
+        result.append("FOCUS ON: ").append(current.getSignature()).append("\n");
         result.append("Priority: ").append(current.getPriority()).append("\n");
         result.append("Complexity: ").append(current.getComplexity()).append("\n");
         result.append("─".repeat(50)).append("\n");
-        result.append("Workflow for this method:\n");
-        result.append("  1. Generate test method(s) for: ").append(current.getName()).append("\n");
-        result.append("  2. Call checkSyntax to verify\n");
-        result.append("  3. Call compileProject\n");
-        result.append("  4. Call executeTest\n");
-        result.append("  5. Call getSingleMethodCoverage('").append(targetModulePath)
+        result.append("⚠️ IGNORE previous method's test code. This is a NEW task.\n\n");
+        result.append("Steps for THIS method ONLY:\n");
+        result.append("  1. Read current test file: readFile(testFilePath)\n");
+        result.append("  2. Generate test ONLY for: ").append(current.getName()).append("\n");
+        result.append("  3. Append tests using writeFileFromLine\n");
+        result.append("  4. checkSyntax → compileProject → executeTest\n");
+        result.append("  5. getSingleMethodCoverage('").append(targetModulePath)
               .append("', '").append(targetClassName).append("', '").append(current.getName()).append("')\n");
-        result.append("  6. Call completeCurrentMethod with status and coverage\n");
+        result.append("  6. completeCurrentMethod(status, coverage, notes)\n");
 
         String finalResult = result.toString();
         log.info("Tool Output - getNextMethod: {} (#{}/{})",

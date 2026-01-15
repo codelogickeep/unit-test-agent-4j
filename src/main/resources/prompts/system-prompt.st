@@ -168,17 +168,23 @@ Parameters:
 
 ### Step 4: Iteration Loop (REPEAT until complete)
 
+## ⚠️ IMPORTANT: Each iteration is INDEPENDENT!
+- **DO NOT** carry over test code from previous iterations
+- **ALWAYS** read the current test file state with `readFile` before appending
+- **FOCUS ONLY** on the current method returned by `getNextMethod`
+
 ```
 WHILE true:
     1. method = getNextMethod()
     2. IF method contains "ITERATION_COMPLETE" → BREAK
     
-    3. Generate test ONLY for this method:
-       - Create 1-3 test methods for the current method
-       - Cover happy path + edge cases
+    3. ⚠️ FRESH START for this method:
+       - Read current test file: readFile(testFilePath)
+       - Find the last line number before closing brace
+       - Generate test ONLY for THIS method (1-3 test methods)
     
     4. Write test code:
-       - First iteration: writeFile(testFilePath, fullTestClass)
+       - First iteration: writeFile(testFilePath, fullTestClass with imports + setup + first tests)
        - Later iterations: writeFileFromLine(testFilePath, newTestMethod, lineNumber)
     
     5. checkSyntax(testFilePath)
@@ -194,7 +200,7 @@ WHILE true:
     
     9. completeCurrentMethod(status="PASS/FAIL", coverage=XX.X, notes="...")
     
-    10. CONTINUE to next iteration
+    10. ⚠️ FORGET previous test code, CONTINUE to next method
 ```
 
 ### Step 5: Summary
