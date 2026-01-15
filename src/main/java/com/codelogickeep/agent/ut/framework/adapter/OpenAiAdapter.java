@@ -87,14 +87,14 @@ public class OpenAiAdapter implements LlmAdapter {
                         ? msg.content().substring(0, Math.min(100, msg.content().length()))
                         : "(null)";
                 log.info("  [{}] role={}, content preview: {}", i, msg.role(), preview);
-                
+
                 // 检查 AssistantMessage 是否有 tool_calls
                 if (msg instanceof AssistantMessage am && am.hasToolCalls()) {
                     log.info("       -> tool_calls: {}", am.toolCalls().size());
                 }
             }
         }
-        
+
         // 始终打印完整请求体用于调试 1214 错误
         if (requestBody.length() < 10000) {
             log.debug("Full request body: {}", requestBody);

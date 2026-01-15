@@ -6,7 +6,7 @@
     
     <groupId>com.codelogickeep</groupId>
     <artifactId>unit-test-agent-4j</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -16,7 +16,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
         <picocli.version>4.7.5</picocli.version>
-        <langchain4j.version>1.10.0</langchain4j.version>
         <javaparser.version>3.25.10</javaparser.version>
         <jackson.version>2.17.0</jackson.version>
         <lombok.version>1.18.32</lombok.version>
@@ -36,32 +35,6 @@
             <artifactId>picocli-codegen</artifactId>
             <version>${picocli.version}</version>
             <scope>provided</scope>
-        </dependency>
-        <!-- AI -->
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-anthropic</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-google-ai-gemini</artifactId>
-            <version>${langchain4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-embeddings-all-minilm-l6-v2</artifactId>
-            <version>1.10.0-beta18</version>
         </dependency>
         <!-- Code Analysis -->
         <dependency>

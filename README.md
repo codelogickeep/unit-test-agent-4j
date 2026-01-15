@@ -4,7 +4,15 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
+[![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+
+## What's New in v1.1.0
+
+- 🚀 **Custom Lightweight Agent Framework** - Replaced LangChain4j with a purpose-built framework
+- 🔧 **Better Zhipu AI Support** - Fixed message format issues (1214 error)
+- 📊 **Improved Context Management** - Smart message trimming that maintains valid conversation sequence
+- ⚡ **Reduced Dependencies** - Lighter JAR size (~50% smaller)
 
 ## Table of Contents
 
@@ -27,7 +35,8 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-Model Support** | Native support for OpenAI, Anthropic (Claude), Gemini, and OpenAI-compatible proxies |
+| **Multi-Model Support** | Native support for OpenAI, Anthropic (Claude), Gemini, Zhipu AI, and OpenAI-compatible APIs |
+| **Custom Agent Framework** | Lightweight, purpose-built framework (no LangChain4j dependency) |
 | **Intelligent Environment Audit** | Auto-detects project dependencies (JUnit 5, Mockito, JaCoCo) and version compatibility |
 | **Self-Healing Mechanism** | Automatically compiles and runs tests, repairs code based on error logs |
 | **Standardized Testing** | Enforces JUnit 5 + Mockito + mockito-inline standards |
@@ -39,6 +48,7 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 | **Mutation Testing** | Integrates PITest to assess test effectiveness |
 | **LSP Syntax Checking** | Optional Eclipse JDT Language Server integration for semantic analysis (auto-download) |
 | **Pre-compile Validation** | JavaParser-based fast syntax checking before compilation |
+| **Iterative Method Testing** | Generate tests one method at a time with priority-based ordering |
 
 ## Installation
 
@@ -268,6 +278,7 @@ workflow:
   iterative-mode: true          # Enable per-method iteration
   method-coverage-threshold: 80 # Per-method threshold
   skip-low-priority: false      # Skip getters/setters if coverage is met
+  use-simple-framework: true    # Use custom lightweight framework
 ```
 
 **Benefits:**
@@ -340,7 +351,7 @@ java -jar utagent.jar \
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
 | `--config` | `-c` | Path to config file | auto-detect |
-| `--protocol` | | LLM protocol (openai/anthropic/gemini) | from config |
+| `--protocol` | | LLM protocol (openai/anthropic/gemini/openai-zhipu) | from config |
 | `--api-key` | | API key | from config/env |
 | `--base-url` | | API base URL | protocol default |
 | `--model` | `-m` | Model name | from config |
@@ -417,6 +428,7 @@ llm:
   # Examples:
   #   - OpenAI: https://api.openai.com (default)
   #   - Azure: https://your-resource.openai.azure.com
+  #   - Zhipu Coding: https://open.bigmodel.cn/api/coding/paas/v4
   #   - Alibaba: https://dashscope.aliyuncs.com/compatible-mode/v1
   baseUrl: "${env:UT_AGENT_BASE_URL}"
   
@@ -451,11 +463,17 @@ workflow:
   # Provides full semantic analysis: type errors, missing imports
   use-lsp: false
   
-  # Enable mutation testing (requires PITest in pom.xml)
-  # enableMutationTesting: false
+  # Enable iterative method testing mode
+  iterative-mode: false
   
-  # Max feedback loop iterations
-  # maxFeedbackLoopIterations: 3
+  # Per-method coverage threshold (for iterative mode)
+  method-coverage-threshold: 80
+  
+  # Skip low-priority methods (getters/setters) when coverage met
+  skip-low-priority: false
+  
+  # Use custom lightweight framework (recommended for Zhipu AI)
+  use-simple-framework: true
 
 # ═══════════════════════════════════════════════════════════════════
 # Batch Mode Settings
@@ -524,10 +542,6 @@ skills:
   - name: "full"
     description: "Full toolset (default)"
     tools: []  # Empty = use all tools
-
-# Set default skill in workflow section:
-# workflow:
-#   default-skill: "analysis"
 ```
 
 ### Environment Variables
@@ -549,6 +563,19 @@ llm:
   modelName: "gpt-4o"
   # For proxies:
   # baseUrl: "https://your-proxy.com/v1"
+```
+
+#### Zhipu AI (GLM)
+
+```yaml
+llm:
+  protocol: "openai-zhipu"
+  apiKey: "your-zhipu-api-key"
+  modelName: "glm-4.7"
+  baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4"
+
+workflow:
+  use-simple-framework: true  # Recommended for Zhipu AI
 ```
 
 #### Anthropic (Claude)
@@ -601,6 +628,7 @@ The agent has access to the following tools:
 | `analyzeClass` | Analyze Java class structure (methods, fields, dependencies) |
 | `analyzeMethod` | Get detailed method analysis (complexity, branches) |
 | `getMethodsForTesting` | List public methods suitable for testing |
+| `getPriorityMethods` | Get prioritized method list for iterative testing |
 | `scanProjectClasses` | Scan project for source classes |
 
 ### Syntax Checking Tools
@@ -628,6 +656,7 @@ The agent has access to the following tools:
 | `getCoverageReport` | Get overall coverage summary |
 | `checkCoverageThreshold` | Check if class meets coverage threshold |
 | `getMethodCoverageDetails` | Get method-level coverage details |
+| `getSingleMethodCoverage` | Get coverage for a single method (iterative mode) |
 
 ### Git Tools
 
@@ -646,6 +675,16 @@ The agent has access to the following tools:
 | `searchKnowledge` | Search knowledge base for patterns |
 | `searchTestingGuidelines` | Find testing conventions |
 | `searchTestExamples` | Find existing test examples |
+
+### Iterative Testing Tools
+
+| Tool | Description |
+|------|-------------|
+| `initMethodIteration` | Initialize method iteration for a class |
+| `getNextMethod` | Get next method to test |
+| `completeCurrentMethod` | Mark current method as completed |
+| `getIterationProgress` | Get iteration progress summary |
+| `skipLowPriorityMethods` | Skip remaining low-priority methods |
 
 ## Architecture
 
@@ -666,22 +705,33 @@ flowchart TB
         JDK[JDK Check]
         MVN[Maven Check]
         LSP[LSP Check]
-        EA --> JDK & MVN & LSP
+        LLM[LLM Check]
+        EA --> JDK & MVN & LSP & LLM
+    end
+
+    subgraph Framework["🚀 Custom Agent Framework"]
+        subgraph Adapters["LLM Adapters"]
+            OAI[OpenAI Adapter]
+            CLA[Claude Adapter]
+            GEM[Gemini Adapter]
+        end
+        subgraph Core["Core Components"]
+            CTX[Context Manager<br/>Message History]
+            REG[Tool Registry<br/>Reflection-based]
+            EXE[Agent Executor<br/>ReAct Loop]
+        end
+        Adapters --> EXE
+        CTX --> EXE
+        REG --> EXE
     end
 
     subgraph Orchestrator["🎯 Agent Orchestrator"]
-        AO[AgentOrchestrator]
+        SAO[SimpleAgentOrchestrator]
         RE[RetryExecutor<br/>Exponential Backoff]
-        SRH[StreamingResponseHandler<br/>Real-time Output]
+        SH[StreamingHandler<br/>Real-time Output]
         RT[RepairTracker<br/>Avoid Loops]
         DPB[DynamicPromptBuilder<br/>Context-aware Prompts]
-        AO --> RE & SRH & RT & DPB
-    end
-
-    subgraph AI["🤖 LangChain4j AI Services"]
-        SCM[Streaming Chat Model]
-        TE[Tool Execution]
-        MEM[Chat Memory]
+        SAO --> RE & SH & RT & DPB
     end
 
     subgraph Tools["🛠️ Tool Layer"]
@@ -703,25 +753,22 @@ flowchart TB
             GIT[GitDiffTool]
             PS[ProjectScannerTool]
         end
-        subgraph KBTools["Knowledge"]
-            KB[KnowledgeBaseTool]
-            CFE[CoverageFeedbackEngine]
+        subgraph IterTools["Iterative Testing"]
+            MIT[MethodIteratorTool]
         end
     end
 
     CLI --> CL
     CV --> EA
-    EA --> AO
-    AO --> SCM
-    SCM --> TE
-    TE --> Tools
-    MEM -.-> SCM
+    EA --> SAO
+    SAO --> EXE
+    EXE --> Tools
 
     style Input fill:#e1f5fe
     style Config fill:#fff3e0
     style Audit fill:#f3e5f5
-    style Orchestrator fill:#e8f5e9
-    style AI fill:#fce4ec
+    style Framework fill:#e8f5e9
+    style Orchestrator fill:#fce4ec
     style Tools fill:#f5f5f5
 ```
 
@@ -731,10 +778,20 @@ flowchart TB
 |-------|-----------|-------------|
 | **Input** | CLI | Command-line interface with picocli |
 | **Config** | ConfigLoader | YAML config with env variable support |
-| **Audit** | EnvironmentChecker | Validates JDK, Maven, LSP availability |
-| **Orchestrator** | AgentOrchestrator | Core loop with retry and streaming |
-| **AI** | LangChain4j | Streaming chat with tool execution |
+| **Audit** | EnvironmentChecker | Validates JDK, Maven, LSP, LLM availability |
+| **Framework** | Custom Agent Framework | Lightweight ReAct loop with multi-LLM support |
+| **Orchestrator** | SimpleAgentOrchestrator | Core loop with retry and streaming |
 | **Tools** | 15+ Tools | File, Code, Build, Git, Coverage operations |
+
+### Custom Framework vs LangChain4j
+
+| Aspect | Custom Framework (v1.1.0) | LangChain4j (v1.0.0) |
+|--------|---------------------------|----------------------|
+| **JAR Size** | ~15MB | ~30MB |
+| **Dependencies** | 8 core | 20+ |
+| **Zhipu AI** | Full support, fixed 1214 | Partial, message format issues |
+| **Context Control** | Fine-grained | Limited |
+| **Startup Time** | Faster | Slower |
 
 ## Troubleshooting
 
@@ -773,16 +830,26 @@ java -jar utagent.jar config --api-key "your-key"
 mvn clean test jacoco:report
 ```
 
-#### 4. Rate Limit Exceeded
+#### 4. Rate Limit Exceeded (1302 Error)
 
-**Error:** `Rate limit exceeded`
+**Error:** `您当前使用该API的并发数过高`
 
 **Solution:**
 - The agent automatically retries with exponential backoff
 - Increase `--timeout` and `--max-retries` if needed
 - Consider using a higher API tier
+- Add delay between requests in config
 
-#### 5. Test Compilation Fails
+#### 5. Zhipu AI 1214 Error (Fixed in v1.1.0)
+
+**Error:** `messages 参数非法`
+
+**Solution:**
+- Upgrade to v1.1.0
+- Use `use-simple-framework: true` in config
+- The custom framework handles Zhipu AI message format correctly
+
+#### 6. Test Compilation Fails
 
 **Error:** `Compilation failed`
 
@@ -798,7 +865,10 @@ mvn clean test jacoco:report
 java -jar utagent.jar --target Foo.java -v
 
 # Via system property
-java -Dut.agent.log.level=DEBUG -jar unit-test-agent-4j.jar --target Foo.java
+java -Dut.agent.log.level=DEBUG -jar utagent.jar --target Foo.java
+
+# Debug custom framework
+java -Dut.framework.log.level=DEBUG -jar utagent.jar --target Foo.java
 ```
 
 ### Log Levels
@@ -818,7 +888,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/unit-test-agent-4j.git
+git clone https://github.com/codelogickeep/unit-test-agent-4j.git
 cd unit-test-agent-4j
 
 # Build with tests
@@ -833,20 +903,23 @@ mvn test -Dtest=FileSystemToolTest
 ```
 unit-test-agent-4j/
 ├── src/main/java/com/codelogickeep/agent/ut/
-│   ├── cli/              # CLI entry points
 │   ├── config/           # Configuration loading & validation
-│   ├── engine/           # Core orchestration
+│   ├── engine/           # Legacy orchestration (LangChain4j)
 │   │   ├── AgentOrchestrator.java
 │   │   ├── RetryExecutor.java
-│   │   ├── StreamingResponseHandler.java
-│   │   ├── DynamicPromptBuilder.java
-│   │   └── RepairTracker.java
+│   │   └── EnvironmentChecker.java
+│   ├── framework/        # Custom lightweight framework (v1.1.0)
+│   │   ├── adapter/      # LLM adapters (OpenAI, Claude, Gemini)
+│   │   ├── context/      # Context management
+│   │   ├── executor/     # ReAct loop executor
+│   │   ├── model/        # Message models
+│   │   └── tool/         # Tool registry & execution
 │   ├── exception/        # Custom exceptions
 │   └── tools/            # Agent tools
 │       ├── FileSystemTool.java
 │       ├── CodeAnalyzerTool.java
 │       ├── CoverageTool.java
-│       ├── GitDiffTool.java
+│       ├── MethodIteratorTool.java
 │       └── ...
 ├── src/test/java/        # Unit tests
 ├── doc/                  # Documentation
