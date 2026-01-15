@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 /**
@@ -17,6 +19,9 @@ public class MethodIteratorTool implements AgentTool {
 
     private final CodeAnalyzerTool codeAnalyzerTool;
     private final CoverageTool coverageTool;
+
+    // Project root for path resolution
+    private String projectRoot;
 
     // Iteration state
     private String targetSourcePath;
@@ -34,6 +39,14 @@ public class MethodIteratorTool implements AgentTool {
         this.methodQueue = new ArrayList<>();
         this.currentIndex = -1;
         this.initialized = false;
+    }
+
+    /**
+     * Set project root for path resolution
+     */
+    public void setProjectRoot(String projectRoot) {
+        this.projectRoot = projectRoot;
+        log.info("MethodIteratorTool: projectRoot set to {}", projectRoot);
     }
 
     /**
@@ -90,8 +103,15 @@ public class MethodIteratorTool implements AgentTool {
         this.startTime = System.currentTimeMillis();
 
         try {
+            // Resolve full path using projectRoot
+            String fullPath = sourcePath;
+            if (projectRoot != null && !Paths.get(sourcePath).isAbsolute()) {
+                fullPath = Paths.get(projectRoot, sourcePath).toString();
+            }
+            log.info("Resolved source path: {}", fullPath);
+            
             // Get prioritized method list
-            List<CodeAnalyzerTool.MethodInfo> methods = codeAnalyzerTool.getPriorityMethodsList(sourcePath);
+            List<CodeAnalyzerTool.MethodInfo> methods = codeAnalyzerTool.getPriorityMethodsList(fullPath);
 
             for (CodeAnalyzerTool.MethodInfo m : methods) {
                 methodQueue.add(new MethodEntry(
@@ -133,7 +153,7 @@ public class MethodIteratorTool implements AgentTool {
         }
     }
 
-    @Tool("Get the next method to test. Returns method details or indicates completion.")
+    @Tool("Get the next method to test. Returns method details or indicates completion. If a method is already IN_PROGRESS, returns that method instead of advancing.")
     public String getNextMethod() {
         log.info("Tool Input - getNextMethod");
 
@@ -141,11 +161,13 @@ public class MethodIteratorTool implements AgentTool {
             return "ERROR: Not initialized. Call initMethodIteration first.";
         }
 
-        // Mark previous method as in progress no more
+        // 如果当前方法仍是 IN_PROGRESS 状态，返回它而不是前进
+        // 这处理了 API 错误重试的情况
         if (currentIndex >= 0 && currentIndex < methodQueue.size()) {
-            MethodEntry prev = methodQueue.get(currentIndex);
-            if ("IN_PROGRESS".equals(prev.getStatus())) {
-                prev.setStatus("PENDING"); // Reset if not completed
+            MethodEntry current = methodQueue.get(currentIndex);
+            if ("IN_PROGRESS".equals(current.getStatus())) {
+                log.info("Current method still IN_PROGRESS, returning same method");
+                return buildMethodResponse(current);
             }
         }
 
@@ -161,6 +183,13 @@ public class MethodIteratorTool implements AgentTool {
         MethodEntry current = methodQueue.get(currentIndex);
         current.setStatus("IN_PROGRESS");
 
+        return buildMethodResponse(current);
+    }
+
+    /**
+     * 构建方法响应信息
+     */
+    private String buildMethodResponse(MethodEntry current) {
         StringBuilder result = new StringBuilder();
         result.append("═".repeat(50)).append("\n");
         result.append("⚠️ NEW METHOD - FRESH START ⚠️\n");

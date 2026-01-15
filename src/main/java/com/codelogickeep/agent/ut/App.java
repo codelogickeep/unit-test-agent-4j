@@ -6,6 +6,7 @@ import com.codelogickeep.agent.ut.engine.LlmClient;
 import com.codelogickeep.agent.ut.tools.FileSystemTool;
 import com.codelogickeep.agent.ut.tools.LspSyntaxCheckerTool;
 import com.codelogickeep.agent.ut.tools.MavenExecutorTool;
+import com.codelogickeep.agent.ut.tools.MethodIteratorTool;
 import com.codelogickeep.agent.ut.tools.SyntaxCheckerTool;
 import com.codelogickeep.agent.ut.tools.ToolFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -200,8 +201,12 @@ public class App implements Callable<Integer> {
                 projectRoot = detectProjectRoot(targetFile);
             }
 
-            // Perform Project Audit at startup
-            com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
+            // Perform Project Audit at startup - 如果 LLM 配置测试失败，停止执行
+            boolean envReady = com.codelogickeep.agent.ut.engine.EnvironmentChecker.check(config, projectRoot);
+            if (!envReady) {
+                System.out.println("\n>>> Aborting due to environment check failure.");
+                return 1;
+            }
 
             // 第一遍：设置基本属性和找到关键工具
             SyntaxCheckerTool syntaxCheckerTool = null;
@@ -221,6 +226,10 @@ public class App implements Callable<Integer> {
                 }
                 if (tool instanceof LspSyntaxCheckerTool) {
                     lspSyntaxCheckerTool = (LspSyntaxCheckerTool) tool;
+                }
+                // 设置 MethodIteratorTool 的项目根路径（迭代模式需要）
+                if (tool instanceof MethodIteratorTool) {
+                    ((MethodIteratorTool) tool).setProjectRoot(projectRoot);
                 }
             }
 

@@ -98,7 +98,21 @@ public class AgentOrchestrator {
     }
 
     public void run(String targetFile, String taskContext) {
-        log.info("Starting Agent orchestration for target: {}", targetFile);
+        // 检查是否启用迭代模式
+        boolean iterativeMode = config.getWorkflow() != null && config.getWorkflow().isIterativeMode();
+        
+        if (iterativeMode) {
+            runIterative(targetFile, taskContext);
+        } else {
+            runTraditional(targetFile, taskContext);
+        }
+    }
+
+    /**
+     * 传统模式：一次性生成所有测试
+     */
+    private void runTraditional(String targetFile, String taskContext) {
+        log.info("Starting Agent orchestration (traditional mode) for target: {}", targetFile);
         
         // 提取项目根路径
         String projectRoot = extractProjectRoot(targetFile);
@@ -110,10 +124,8 @@ public class AgentOrchestrator {
         logRegisteredTools();
 
         // 使用重试执行器执行任务
-        // 注意：每次重试都创建新的 assistant，避免 ChatMemory 累积导致消息格式问题
         RetryExecutor.ExecutionResult<OrchestrationResult> result = retryExecutor.execute(
                 () -> {
-                    // 每次执行都创建新的 assistant，清空 ChatMemory
                     UnitTestAssistant assistant = createAssistant(systemPrompt);
                     return executeTask(assistant, targetFile, taskContext);
                 },
@@ -131,6 +143,155 @@ public class AgentOrchestrator {
                 log.debug("Final exception:", result.getLastException());
             }
         }
+    }
+
+    /**
+     * 迭代模式：每个方法独立执行，每次创建新的 assistant
+     * 
+     * 流程：
+     * 1. 第一轮：初始化（分析方法、创建测试文件骨架）
+     * 2. 循环：每个方法单独处理（新 assistant = 清空上下文）
+     * 3. 最后：汇总报告
+     */
+    private void runIterative(String targetFile, String taskContext) {
+        log.info("Starting Agent orchestration (ITERATIVE mode) for target: {}", targetFile);
+        
+        String projectRoot = extractProjectRoot(targetFile);
+        String systemPrompt = buildSystemPrompt(projectRoot);
+        
+        logRegisteredTools();
+
+        // 获取 LLM 协议，用于智谱 AI 兼容性处理
+        String llmProtocol = config.getLlm() != null ? config.getLlm().getProtocol() : "";
+        boolean isZhipuAI = "openai-zhipu".equalsIgnoreCase(llmProtocol);
+        
+        // ===== Phase 1: 初始化 =====
+        log.info(">>> Phase 1: Initialization");
+        String initPrompt = buildIterativeInitPrompt(targetFile);
+        
+        // 智谱 AI 需要更小的窗口大小来避免 1214 错误
+        int phase1MemorySize = isZhipuAI ? 8 : 15;
+        
+        RetryExecutor.ExecutionResult<OrchestrationResult> initResult = retryExecutor.execute(
+                () -> {
+                    UnitTestAssistant assistant = createAssistant(systemPrompt, phase1MemorySize);
+                    return executeTask(assistant, targetFile, initPrompt);
+                },
+                "Iterative Init for " + extractFileName(targetFile)
+        );
+
+        if (!initResult.isSuccess()) {
+            log.error("Iterative initialization failed: {}", initResult.getSummary());
+            return;
+        }
+
+        // ===== Phase 2: 逐方法迭代 =====
+        int maxIterations = 20;  // 防止无限循环
+        int iteration = 0;
+        
+        // 智谱 AI 需要最小的窗口大小（每次调用都几乎是全新的）
+        // 原因：LangChain4j 生成的 assistant 消息在有 tool_calls 时会省略 content 字段
+        // 智谱 AI 要求 content 字段必须存在，这是个兼容性问题
+        int phase2MemorySize = isZhipuAI ? 3 : 10;
+        if (isZhipuAI) {
+            log.info("Using small ChatMemory (size={}) for Zhipu AI to minimize 1214 errors", phase2MemorySize);
+        }
+        
+        while (iteration < maxIterations) {
+            iteration++;
+            log.info(">>> Phase 2: Method Iteration #{}", iteration);
+            
+            // 每个方法创建新的 assistant（清空上下文！）
+            String methodPrompt = buildIterativeMethodPrompt(targetFile, iteration);
+            final int memSize = phase2MemorySize;
+            
+            RetryExecutor.ExecutionResult<OrchestrationResult> methodResult = retryExecutor.execute(
+                    () -> {
+                        // ⚠️ 新 assistant = 新上下文
+                        UnitTestAssistant assistant = createAssistant(systemPrompt, memSize);
+                        return executeTask(assistant, targetFile, methodPrompt);
+                    },
+                    "Method #" + iteration
+            );
+
+            if (!methodResult.isSuccess()) {
+                log.warn("Method iteration #{} failed, continuing...", iteration);
+            }
+
+            // 检查迭代是否完成（通过检测输出内容）
+            String content = methodResult.isSuccess() && methodResult.getResult() != null 
+                    ? methodResult.getResult().getContent() : "";
+            if (content.contains("ITERATION_COMPLETE") || content.contains("getIterationProgress")) {
+                log.info(">>> Iteration completed after {} methods", iteration);
+                break;
+            }
+        }
+
+        // ===== Phase 3: 汇总 =====
+        log.info(">>> Phase 3: Summary");
+        String summaryPrompt = "Call getIterationProgress() to show the final summary of all tested methods.";
+        
+        RetryExecutor.ExecutionResult<OrchestrationResult> summaryResult = retryExecutor.execute(
+                () -> {
+                    UnitTestAssistant assistant = createAssistant(systemPrompt, 5);
+                    return executeTask(assistant, targetFile, summaryPrompt);
+                },
+                "Summary"
+        );
+
+        if (summaryResult.isSuccess()) {
+            log.info("Iterative test generation completed successfully.");
+        } else {
+            log.warn("Summary phase failed, but tests may have been generated.");
+        }
+    }
+
+    /**
+     * 构建迭代模式初始化提示
+     */
+    private String buildIterativeInitPrompt(String targetFile) {
+        return String.format("""
+            ## ITERATIVE MODE - PHASE 1: INITIALIZATION
+            
+            Target file: %s
+            
+            Please complete these steps:
+            1. Check if test directory exists (directoryExists)
+            2. Check if test file exists (fileExists)  
+            3. Read the source file (readFile)
+            4. Analyze method priorities (getPriorityMethods)
+            5. Initialize iteration (initMethodIteration)
+            6. Create the test file skeleton if it doesn't exist (writeFile with imports, class declaration, @Mock fields, @BeforeEach setup)
+            
+            After initialization, call getNextMethod() to get the first method to test.
+            Then STOP and wait for next instruction.
+            """, targetFile);
+    }
+
+    /**
+     * 构建迭代模式方法处理提示
+     */
+    private String buildIterativeMethodPrompt(String targetFile, int iteration) {
+        return String.format("""
+            ## ITERATIVE MODE - PHASE 2: METHOD #%d
+            
+            Target file: %s
+            
+            ⚠️ THIS IS A FRESH CONTEXT - Previous conversation is cleared.
+            
+            Please complete these steps:
+            1. Call getNextMethod() to get the current method
+            2. If it returns "ITERATION_COMPLETE", call getIterationProgress() and STOP
+            3. Otherwise:
+               a. Read current test file (readFile)
+               b. Generate test methods ONLY for the current method
+               c. Append tests using writeFileFromLine
+               d. checkSyntax → compileProject → executeTest
+               e. getSingleMethodCoverage for this method
+               f. completeCurrentMethod with status and coverage
+            
+            After completing this method, STOP and wait for next instruction.
+            """, iteration, targetFile);
     }
 
     /**
@@ -205,12 +366,29 @@ public class AgentOrchestrator {
 
     /**
      * 创建 AI Assistant
-     * 迭代模式使用较小的窗口（10），普通模式使用较大窗口（20）
+     * 迭代模式使用较小的窗口（6），普通模式使用中等窗口（12）
+     * 注意：窗口过大会导致智谱 AI 的 1214 错误（messages 参数非法）
      */
     private UnitTestAssistant createAssistant(String systemPrompt) {
-        // 迭代模式使用较小窗口，减少上下文干扰
+        // 智谱 AI 的 1214 错误问题：
+        // LangChain4j 生成的 assistant 消息在有 tool_calls 时会省略 content 字段
+        // 智谱 AI 要求 content 字段必须存在
+        // 解决方案：在迭代模式下使用最小窗口（1），每次请求都是全新的
+        // 这样 ChatMemory 中只有 system 消息，不会包含有问题的 assistant 消息
         boolean iterativeMode = config.getWorkflow() != null && config.getWorkflow().isIterativeMode();
-        int memorySize = iterativeMode ? 10 : 20;
+        String llmProtocol = config.getLlm() != null ? config.getLlm().getProtocol() : "";
+        
+        int memorySize;
+        if (iterativeMode && "openai-zhipu".equalsIgnoreCase(llmProtocol)) {
+            // 智谱 AI + 迭代模式：使用最小窗口，避免消息格式问题
+            memorySize = 1;
+            log.info("Using minimal ChatMemory (size=1) for Zhipu AI to avoid 1214 errors");
+        } else if (iterativeMode) {
+            memorySize = 6;
+        } else {
+            memorySize = 12;
+        }
+        log.debug("Creating assistant with ChatMemory window size: {}", memorySize);
         return createAssistant(systemPrompt, memorySize);
     }
 

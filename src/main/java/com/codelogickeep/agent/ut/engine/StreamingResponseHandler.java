@@ -47,28 +47,28 @@ public class StreamingResponseHandler {
      * 处理 TokenStream 并返回完整响应
      * 
      * @param tokenStream LLM 的流式响应
-     * @param onToken 每个 token 的回调（可选）
+     * @param onToken     每个 token 的回调（可选）
      * @return 处理结果
      */
     public StreamingResult handle(TokenStream tokenStream, Consumer<String> onToken) {
         StringBuilder contentBuilder = new StringBuilder();
         CompletableFuture<StreamingResult> future = new CompletableFuture<>();
         long startTime = System.currentTimeMillis();
-        int[] tokenCount = {0};
+        int[] tokenCount = { 0 };
 
         tokenStream
                 .onPartialResponse(token -> {
                     tokenCount[0]++;
-                    
+
                     // 打印到输出流
                     if (showProgress) {
                         outputStream.print(token);
                         outputStream.flush();
                     }
-                    
+
                     // 收集内容
                     contentBuilder.append(token);
-                    
+
                     // 调用回调
                     if (onToken != null) {
                         onToken.accept(token);
@@ -78,24 +78,27 @@ public class StreamingResponseHandler {
                     if (showProgress) {
                         outputStream.println();
                     }
-                    
+
                     long duration = System.currentTimeMillis() - startTime;
-                    
+
                     StreamingResult result = StreamingResult.builder()
                             .success(true)
                             .content(contentBuilder.toString())
                             .tokenCount(tokenCount[0])
                             .durationMs(duration)
                             .build();
-                    
+
                     log.debug("Streaming completed: {} tokens in {}ms", tokenCount[0], duration);
                     future.complete(result);
                 })
                 .onError(error -> {
-                    log.error("Streaming error: {}", error.getMessage());
-                    
+                    log.error("Streaming error: {} - {}", error.getClass().getName(), error.getMessage());
+                    if (error.getMessage() == null || error.getMessage().isEmpty()) {
+                        log.error("Full error stack trace:", error);
+                    }
+
                     long duration = System.currentTimeMillis() - startTime;
-                    
+
                     StreamingResult result = StreamingResult.builder()
                             .success(false)
                             .content(contentBuilder.toString())
@@ -103,7 +106,7 @@ public class StreamingResponseHandler {
                             .durationMs(duration)
                             .error(error)
                             .build();
-                    
+
                     future.complete(result);
                 })
                 .start();

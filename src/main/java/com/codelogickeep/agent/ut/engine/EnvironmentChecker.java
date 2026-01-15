@@ -22,11 +22,18 @@ import java.util.regex.Pattern;
 
 public class EnvironmentChecker {
 
+    /**
+     * 检查环境（仅检查模式）
+     */
     public static void check(AppConfig config) {
         check(config, null);
     }
 
-    public static void check(AppConfig config, String projectRoot) {
+    /**
+     * 检查环境并返回是否可以继续执行
+     * @return true 如果环境检查通过（至少 LLM 配置正确），false 否则
+     */
+    public static boolean check(AppConfig config, String projectRoot) {
         System.out.println("\n>>> Starting Environment Check...\n");
 
         if (config.getLlm() != null) {
@@ -57,14 +64,35 @@ public class EnvironmentChecker {
             System.out.println("Project Dep: " + (projectOk ? "OK" : "WARNING (Dependency issues found)"));
         }
 
-        if (!mvnOk || !llmOk || !permOk) {
+        // LLM 检查失败是致命错误，必须停止
+        if (!llmOk) {
+            System.out.println("\n>>> CRITICAL: LLM configuration test FAILED!");
+            System.out.println("    Please check your configuration file and ensure:");
+            System.out.println("    1. API Key is correct and valid");
+            System.out.println("    2. Protocol matches your LLM provider:");
+            System.out.println("       - 'openai' for OpenAI GPT models");
+            System.out.println("       - 'openai-zhipu' for Zhipu GLM Coding Plan (baseUrl: https://open.bigmodel.cn/api/coding/paas/v4)");
+            System.out.println("       - 'anthropic' for Claude models");
+            System.out.println("       - 'gemini' for Google Gemini");
+            System.out.println("    3. Model name is correct for your provider");
+            System.out.println("    4. BaseUrl is correct (if using custom endpoint)");
+            System.out.println("\n>>> Agent will NOT start until LLM configuration is fixed.");
+            return false;
+        }
+
+        if (!mvnOk || !permOk) {
             System.out.println("\n>>> Please fix the CRITICAL issues above before running the agent.");
-        } else if (projectRoot != null && !projectOk) {
+            return false;
+        }
+        
+        if (projectRoot != null && !projectOk) {
             System.out.println("\n>>> WARNING: Project has missing or outdated recommended dependencies.");
             System.out.println("    The Agent will attempt to fix pom.xml automatically during execution.");
         } else {
             System.out.println("\n>>> Environment is ready!");
         }
+        
+        return true;
     }
     
     /**

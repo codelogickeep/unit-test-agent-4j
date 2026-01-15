@@ -24,8 +24,9 @@
     <logger name="com.codelogickeep.agent.ut.tools" level="${ut.agent.log.level:-INFO}" />
     <logger name="com.codelogickeep.agent.ut.engine" level="${ut.agent.log.level:-INFO}" />
     
-    <!-- LangChain4j framework - default to WARN to reduce noise -->
-    <logger name="dev.langchain4j" level="WARN" />
+    <!-- LangChain4j framework - 可通过 -Dllm.log.requests=true 启用 DEBUG -->
+    <logger name="dev.langchain4j" level="${llm.log.level:-WARN}" />
+    <logger name="dev.langchain4j.model.openai" level="${llm.log.level:-WARN}" />
     
     <!-- Third-party libraries - keep quiet -->
     <logger name="org.apache.http" level="WARN" />
