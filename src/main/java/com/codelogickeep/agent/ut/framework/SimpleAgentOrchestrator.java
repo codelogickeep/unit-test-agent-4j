@@ -444,13 +444,20 @@ public class SimpleAgentOrchestrator {
                     message.append("```\n");
                     message.append(currentPreCheck.coverageInfo);
                     message.append("\n```\n");
-                    message.append("\n**IMPORTANT**: Focus on methods with LOW or ZERO coverage. ");
-                    message.append("Skip methods that already have good coverage (≥80%).\n");
+                    message.append("\n### ⚠️ CRITICAL INSTRUCTIONS for Existing Tests:\n");
+                    message.append("1. **READ the coverage report above** - it shows which methods need tests\n");
+                    message.append("2. **Symbol meanings**: ✗ = No coverage (MUST TEST), ◐ = Partial (NEED MORE), ✓ = Good (SKIP)\n");
+                    message.append("3. **DO NOT duplicate existing tests** - Read existing test file first\n");
+                    message.append("4. **Focus on uncovered code paths**:\n");
+                    message.append("   - Methods marked ✗ (0% coverage): Create new test methods\n");
+                    message.append("   - Methods marked ◐ (partial): Add tests for uncovered branches\n");
+                    message.append("   - Methods marked ✓ (≥80%): SKIP - already well tested\n");
+                    message.append("5. **Use `writeFileFromLine` to APPEND tests**, do not overwrite existing tests\n");
                 }
             } else {
                 message.append("\n\n## Pre-check Results\n");
                 message.append("✅ Project compiled successfully\n");
-                message.append("ℹ️ No existing test file - will create new tests\n");
+                message.append("ℹ️ No existing test file - will create new tests for ALL methods\n");
             }
         }
 
@@ -482,12 +489,22 @@ public class SimpleAgentOrchestrator {
                     sb.append("```\n");
                     sb.append(currentPreCheck.coverageInfo);
                     sb.append("\n```\n\n");
-                    sb.append("⚠️ **IMPORTANT**: Based on coverage analysis above:\n");
-                    sb.append("- SKIP methods with coverage ≥80%\n");
-                    sb.append("- FOCUS on methods with LOW or ZERO coverage\n\n");
+                    sb.append("### ⚠️ COVERAGE-DRIVEN TEST GENERATION (MANDATORY):\n\n");
+                    sb.append("**Symbol meanings in coverage report:**\n");
+                    sb.append("- ✗ = 0% coverage → MUST generate tests\n");
+                    sb.append("- ◐ = Partial coverage → ADD tests for uncovered branches\n");
+                    sb.append("- ✓ = ≥80% coverage → SKIP (already covered)\n\n");
+                    sb.append("**Your task:**\n");
+                    sb.append("1. When calling `initMethodIteration`, ONLY include methods with ✗ or ◐\n");
+                    sb.append("2. For each uncovered method:\n");
+                    sb.append("   - Read source code to understand the logic\n");
+                    sb.append("   - Identify uncovered branches/paths\n");
+                    sb.append("   - Generate tests targeting those specific paths\n");
+                    sb.append("3. Use `writeFileFromLine` to APPEND tests, do not overwrite\n");
+                    sb.append("4. After each method, verify coverage improved\n\n");
                 }
             } else {
-                sb.append("ℹ️ No existing test file - will create new tests\n\n");
+                sb.append("ℹ️ No existing test file - will create new tests for ALL methods\n\n");
             }
         }
 
@@ -686,13 +703,23 @@ public class SimpleAgentOrchestrator {
         // Step 4: 获取覆盖率报告
         System.out.println("\n📊 Step 4: Analyzing coverage...");
         String coverageInfo = null;
+        String uncoveredMethods = null;
         try {
             String className = extractClassName(targetFile);
+            int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
 
+            // 获取详细覆盖率
             Map<String, Object> coverageArgs = new HashMap<>();
             coverageArgs.put("modulePath", projectRoot);
             coverageArgs.put("className", className);
             coverageInfo = toolRegistry.invoke("getMethodCoverageDetails", coverageArgs);
+
+            // 获取未覆盖方法列表
+            Map<String, Object> uncoveredArgs = new HashMap<>();
+            uncoveredArgs.put("modulePath", projectRoot);
+            uncoveredArgs.put("className", className);
+            uncoveredArgs.put("threshold", threshold);
+            uncoveredMethods = toolRegistry.invoke("getUncoveredMethods", uncoveredArgs);
 
             if (coverageInfo != null && !coverageInfo.startsWith("ERROR")) {
                 System.out.println("✅ Coverage analysis complete:");
@@ -703,6 +730,11 @@ public class SimpleAgentOrchestrator {
                 }
                 if (lines.length > 15) {
                     System.out.println("   ... (" + (lines.length - 15) + " more lines)");
+                }
+                
+                // 合并覆盖率信息
+                if (uncoveredMethods != null && !uncoveredMethods.startsWith("ERROR")) {
+                    coverageInfo = coverageInfo + "\n\n" + uncoveredMethods;
                 }
             } else {
                 System.out.println("⚠️ Could not get coverage details (no JaCoCo report found)");

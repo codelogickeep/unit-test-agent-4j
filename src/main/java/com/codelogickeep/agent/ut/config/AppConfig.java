@@ -28,18 +28,18 @@ public class AppConfig {
          * 增量模式: uncommitted(默认), staged, compare
          */
         private String mode = "uncommitted";
-        
+
         /**
          * 基准引用（用于 compare 模式）
          * 不预设任何分支名，完全由用户指定
          */
         private String baseRef;
-        
+
         /**
          * 目标引用（用于 compare 模式，默认 HEAD）
          */
         private String targetRef = "HEAD";
-        
+
         /**
          * 排除模式列表（逗号分隔）
          */
@@ -80,18 +80,18 @@ public class AppConfig {
         @JsonProperty("skip-low-priority")
         private boolean skipLowPriority = false; // 是否跳过低优先级方法 (P2)
     }
-    
+
     @Data
     public static class McpConfig {
         private List<Map<String, Object>> servers;
     }
-    
+
     @Data
     public static class SkillConfig {
         private String name;
         private String description;
         private String type;
         private Map<String, Object> params;
-        private List<String> tools;  // 工具类名列表，空或 null 表示使用全部工具
+        private List<String> tools; // 工具类名列表，空或 null 表示使用全部工具
     }
 }

@@ -207,6 +207,97 @@ public class CoverageTool implements AgentTool {
         }
     }
 
+    @Tool("Get list of methods with low or no coverage that need tests. Returns structured list for targeted test generation.")
+    public String getUncoveredMethods(
+            @P("Path to the module directory") String modulePath,
+            @P("Fully qualified class name (e.g., com.example.MyService)") String className,
+            @P("Coverage threshold (default 80), methods below this need tests") int threshold) throws IOException {
+
+        log.info("Tool Input - getUncoveredMethods: modulePath={}, className={}, threshold={}", modulePath, className, threshold);
+        Path reportPath = Paths.get(modulePath, "target", "site", "jacoco", "jacoco.xml");
+        File xmlFile = reportPath.toFile();
+
+        if (!xmlFile.exists()) {
+            return "ERROR: Coverage report not found. Run 'mvn test jacoco:report' first.";
+        }
+
+        try {
+            Document doc = parseXml(xmlFile);
+            String packageName = className.contains(".") ? className.substring(0, className.lastIndexOf('.')) : "";
+            String simpleClassName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
+            NodeList packages = doc.getElementsByTagName("package");
+            for (int i = 0; i < packages.getLength(); i++) {
+                Element pkg = (Element) packages.item(i);
+                if (!pkg.getAttribute("name").replace('/', '.').equals(packageName)) continue;
+
+                NodeList classes = pkg.getElementsByTagName("class");
+                for (int j = 0; j < classes.getLength(); j++) {
+                    Element cls = (Element) classes.item(j);
+                    String clsName = cls.getAttribute("name");
+                    if (!clsName.endsWith("/" + simpleClassName) && !clsName.equals(simpleClassName)) continue;
+
+                    StringBuilder result = new StringBuilder();
+                    result.append("## Uncovered Methods Requiring Tests\n\n");
+                    result.append("Class: ").append(className).append("\n");
+                    result.append("Threshold: ").append(threshold).append("%\n\n");
+
+                    int totalMethods = 0;
+                    int uncoveredCount = 0;
+
+                    NodeList methods = cls.getElementsByTagName("method");
+                    for (int k = 0; k < methods.getLength(); k++) {
+                        Element method = (Element) methods.item(k);
+                        String methodName = method.getAttribute("name");
+                        String desc = method.getAttribute("desc");
+
+                        if ("<clinit>".equals(methodName)) continue;
+                        totalMethods++;
+
+                        double lineCov = calculateCoverage(method, "LINE");
+                        double branchCov = calculateCoverage(method, "BRANCH");
+
+                        if (lineCov < threshold) {
+                            uncoveredCount++;
+                            String displayName = "<init>".equals(methodName) ? "constructor" : methodName;
+                            String priority = lineCov == 0 ? "HIGH" : "MEDIUM";
+                            
+                            result.append("### ").append(uncoveredCount).append(". ");
+                            result.append(displayName).append(parseDescriptor(desc)).append("\n");
+                            result.append("- **Priority**: ").append(priority).append("\n");
+                            result.append("- **Line Coverage**: ").append(String.format("%.1f%%", lineCov)).append("\n");
+                            result.append("- **Branch Coverage**: ").append(String.format("%.1f%%", branchCov)).append("\n");
+                            result.append("- **Action**: ");
+                            if (lineCov == 0) {
+                                result.append("Create new test methods covering all code paths\n");
+                            } else {
+                                result.append("Add tests for uncovered branches and edge cases\n");
+                            }
+                            result.append("\n");
+                        }
+                    }
+
+                    if (uncoveredCount == 0) {
+                        result.append("✅ All methods meet the coverage threshold (").append(threshold).append("%)!\n");
+                        result.append("No additional tests needed.\n");
+                    } else {
+                        result.append("---\n");
+                        result.append("**Summary**: ").append(uncoveredCount).append("/").append(totalMethods);
+                        result.append(" methods need additional test coverage.\n");
+                    }
+
+                    String finalResult = result.toString();
+                    log.info("Tool Output - getUncoveredMethods: {} methods need tests", uncoveredCount);
+                    return finalResult;
+                }
+            }
+            return "ERROR: Class '" + className + "' not found in coverage report.";
+        } catch (Exception e) {
+            log.error("Failed to get uncovered methods", e);
+            throw new IOException("Failed to get uncovered methods: " + e.getMessage(), e);
+        }
+    }
+
     private Document parseXml(File xmlFile) throws Exception {
         DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
         // Allow DOCTYPE for JaCoCo XML reports

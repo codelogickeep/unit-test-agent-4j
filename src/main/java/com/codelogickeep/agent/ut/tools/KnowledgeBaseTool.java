@@ -67,7 +67,7 @@ public class KnowledgeBaseTool implements AgentTool {
             log.info("Initializing knowledge base from: {}", knowledgeBasePath);
 
             documents = new ArrayList<>();
-            
+
             if (Files.isDirectory(path)) {
                 try (Stream<Path> stream = Files.find(path, 10,
                         (p, attr) -> attr.isRegularFile() && isSupportedFile(p.toString()))) {
@@ -173,9 +173,9 @@ public class KnowledgeBaseTool implements AgentTool {
             for (DocumentInfo doc : documents) {
                 // 类型过滤
                 if (filterType != null && !"all".equalsIgnoreCase(filterType) && !filterType.equalsIgnoreCase(doc.type)) {
-                    continue;
-                }
-                
+                        continue;
+                    }
+                    
                 // 关键词匹配
                 String lowerContent = doc.content.toLowerCase();
                 int matchCount = 0;
