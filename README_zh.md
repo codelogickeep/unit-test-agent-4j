@@ -5,9 +5,9 @@
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+[![Version](https://img.shields.io/badge/Version-2.0.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 
-## v1.1.0 新特性
+## v2.0.0 新特性
 
 - 🚀 **自研轻量级 Agent 框架** - 替换 LangChain4j，使用专门构建的框架
 - 🔧 **更好的智谱 AI 支持** - 修复消息格式问题（1214 错误）
@@ -891,7 +891,7 @@ flowchart TB
 
 ### 自研框架 vs LangChain4j
 
-| 对比项 | 自研框架 (v1.1.0) | LangChain4j (v1.0.0) |
+| 对比项 | 自研框架 (v2.0.0) | LangChain4j (v1.0.0) |
 |--------|-------------------|----------------------|
 | **JAR 大小** | ~15MB | ~30MB |
 | **依赖数** | 8 核心 | 20+ |
@@ -1030,13 +1030,13 @@ mvn clean test jacoco:report
 - 考虑使用更高级别的 API 套餐
 - 在请求之间增加延迟
 
-#### 5. 智谱 AI 1214 错误（v1.1.0 已修复）
+#### 5. 智谱 AI 1214 错误（v2.0.0 已修复）
 
 **错误：** `messages 参数非法`
 
 **解决方案：**
-- 升级到 v1.1.0
-- 自研框架（v1.1.0 默认）正确处理智谱 AI 消息格式
+- 升级到 v2.0.0
+- 自研框架（v2.0.0 默认）正确处理智谱 AI 消息格式
 
 #### 7. 测试编译失败
 
@@ -1096,7 +1096,7 @@ unit-test-agent-4j/
 │   │   ├── EnvironmentChecker.java      # 环境验证
 │   │   ├── BatchAnalyzer.java           # 批量模式分析
 │   │   └── DynamicPromptBuilder.java    # 上下文感知提示词
-│   ├── framework/        # 自研轻量级框架 (v1.1.0)
+│   ├── framework/        # 自研轻量级框架 (v2.0.0)
 │   │   ├── adapter/      # LLM 适配器 (OpenAI, Claude, Gemini, 智谱)
 │   │   ├── context/      # 上下文管理
 │   │   ├── executor/     # ReAct 循环执行器

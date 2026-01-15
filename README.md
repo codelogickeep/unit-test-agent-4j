@@ -4,10 +4,10 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
-[![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+[![Version](https://img.shields.io/badge/Version-2.0.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
-## What's New in v1.1.0
+## What's New in v2.0.0
 
 - 🚀 **Custom Lightweight Agent Framework** - Replaced LangChain4j with a purpose-built framework
 - 🔧 **Better Zhipu AI Support** - Fixed message format issues (1214 error)
@@ -918,7 +918,7 @@ flowchart TB
 
 ### Custom Framework vs LangChain4j
 
-| Aspect | Custom Framework (v1.1.0) | LangChain4j (v1.0.0) |
+| Aspect | Custom Framework (v2.0.0) | LangChain4j (v1.0.0) |
 |--------|---------------------------|----------------------|
 | **JAR Size** | ~15MB | ~30MB |
 | **Dependencies** | 8 core | 20+ |
@@ -1057,13 +1057,13 @@ mvn clean test jacoco:report
 - Consider using a higher API tier
 - Add delay between requests in config
 
-#### 5. Zhipu AI 1214 Error (Fixed in v1.1.0)
+#### 5. Zhipu AI 1214 Error (Fixed in v2.0.0)
 
 **Error:** `messages 参数非法`
 
 **Solution:**
-- Upgrade to v1.1.0
-- The custom framework (default since v1.1.0) handles Zhipu AI message format correctly
+- Upgrade to v2.0.0
+- The custom framework (default since v2.0.0) handles Zhipu AI message format correctly
 
 #### 6. Test Compilation Fails
 
@@ -1126,7 +1126,7 @@ unit-test-agent-4j/
 │   │   ├── EnvironmentChecker.java      # Environment validation
 │   │   ├── BatchAnalyzer.java           # Batch mode analysis
 │   │   └── DynamicPromptBuilder.java    # Context-aware prompts
-│   ├── framework/        # Custom lightweight framework (v1.1.0)
+│   ├── framework/        # Custom lightweight framework (v2.0.0)
 │   │   ├── adapter/      # LLM adapters (OpenAI, Claude, Gemini)
 │   │   ├── context/      # Context management
 │   │   ├── executor/     # ReAct loop executor
