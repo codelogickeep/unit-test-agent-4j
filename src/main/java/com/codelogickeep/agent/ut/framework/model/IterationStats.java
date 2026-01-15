@@ -24,14 +24,14 @@ public class IterationStats {
         this.targetFile = targetFile;
         this.startTime = LocalDateTime.now();
     }
-    
+
     /**
      * 设置覆盖率反馈历史摘要
      */
     public void setFeedbackSummary(String summary) {
         this.feedbackSummary = summary;
     }
-    
+
     /**
      * 获取覆盖率反馈历史摘要
      */

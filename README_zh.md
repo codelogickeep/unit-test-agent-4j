@@ -5,6 +5,17 @@
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+
+## v1.1.0 新特性
+
+- 🚀 **自研轻量级 Agent 框架** - 替换 LangChain4j，使用专门构建的框架
+- 🔧 **更好的智谱 AI 支持** - 修复消息格式问题（1214 错误）
+- 📊 **改进的上下文管理** - 智能消息裁剪，保持有效对话序列
+- ⚡ **减少依赖** - JAR 包体积减小约 50%
+- 🔬 **覆盖率反馈引擎** - 智能分析，包含边界检测和改进建议
+- 📈 **迭代统计与报告** - 详细的 Markdown 报告，包含覆盖率趋势和 Token 使用统计
+- 🔄 **增强的重试机制** - 更好的错误处理，LLM 失败时自动重试
 
 ## 目录
 
@@ -27,7 +38,8 @@
 
 | 特性 | 说明 |
 |------|------|
-| **多模型支持** | 原生支持 OpenAI、Anthropic (Claude)、Gemini 及 OpenAI 兼容代理 |
+| **多模型支持** | 原生支持 OpenAI、Anthropic (Claude)、Gemini、智谱 AI 及 OpenAI 兼容代理 |
+| **自研 Agent 框架** | 轻量级专用框架（无 LangChain4j 依赖） |
 | **智能环境审计** | 自动检测项目依赖（JUnit 5、Mockito、JaCoCo）及版本兼容性 |
 | **自我修复机制** | 自动编译运行测试，根据错误日志修复代码 |
 | **标准化测试** | 强制使用 JUnit 5 + Mockito + mockito-inline 标准 |
@@ -35,11 +47,14 @@
 | **指数退避重试** | 智能处理 API 速率限制 |
 | **RAG 知识库** | 检索现有测试和文档，确保代码风格一致 |
 | **覆盖率驱动增强** | 分析未覆盖方法，自动补充测试 |
+| **覆盖率反馈引擎** | 智能反馈，包含边界分析和改进建议 |
 | **Git 增量检测** | 仅为变更文件生成测试（未提交/暂存/分支间比较） |
 | **变异测试** | 集成 PITest 评估测试有效性 |
 | **LSP 语法检查** | 可选的 Eclipse JDT Language Server 集成，提供完整语义分析（自动下载） |
 | **预编译验证** | 基于 JavaParser 的快速语法检查，编译前拦截错误 |
+| **迭代方法测试** | 逐方法生成测试，按优先级排序 |
 | **交互模式** | 在应用更改前预览并确认文件写入操作（安全优先的工作流） |
+| **统计报告** | 生成详细的 Markdown 报告，包含 Token 使用和覆盖率趋势 |
 
 ## 安装
 
@@ -550,6 +565,15 @@ workflow:
   # 启用 LSP 语法检查（自动下载 JDT LS 1.50.0，支持 JDK 21+）
   # 提供完整语义分析：类型错误、缺失导入
   use-lsp: false
+  
+  # 启用迭代方法测试模式
+  iterative-mode: false
+  
+  # 每方法覆盖率阈值（迭代模式）
+  method-coverage-threshold: 80
+  
+  # 覆盖率达标时跳过低优先级方法（getters/setters）
+  skip-low-priority: false
 
 # ═══════════════════════════════════════════════════════════════════
 # 批量模式设置
@@ -654,6 +678,16 @@ llm:
   modelName: "gemini-1.5-pro"
 ```
 
+#### 智谱 AI (GLM)
+
+```yaml
+llm:
+  protocol: "openai-zhipu"
+  apiKey: "your-zhipu-api-key"
+  modelName: "glm-4.7"
+  baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4"
+```
+
 #### 阿里云（百炼 / DashScope）
 
 ```yaml
@@ -713,6 +747,31 @@ Agent 可以使用以下工具：
 | `getCoverageReport` | 获取整体覆盖率摘要 |
 | `checkCoverageThreshold` | 检查类是否达到覆盖率阈值 |
 | `getMethodCoverageDetails` | 获取方法级覆盖率详情 |
+| `getSingleMethodCoverage` | 获取单个方法的覆盖率（迭代模式） |
+| `getUncoveredMethods` | 获取低于阈值的未覆盖方法列表 |
+
+### 覆盖率反馈引擎
+
+`CoverageFeedbackEngine` 提供智能分析和改进建议：
+
+| 功能 | 说明 |
+|------|------|
+| **反馈周期** | 分析覆盖率，识别未覆盖区域，生成优先级排序的建议 |
+| **边界分析** | 集成 `BoundaryAnalyzerTool` 识别边界测试机会 |
+| **变异分析** | 可选集成 `MutationTestTool` 评估测试有效性 |
+| **改进建议** | 优先级排序：缺失测试、边界测试、变异存活 |
+| **迭代历史** | 跟踪多轮迭代的覆盖率进展 |
+| **智能停止** | 检测到无进展时自动停止迭代 |
+
+### 迭代测试工具
+
+| 工具 | 说明 |
+|------|------|
+| `initMethodIteration` | 为类初始化方法迭代 |
+| `getNextMethod` | 获取下一个待测试方法 |
+| `completeCurrentMethod` | 标记当前方法为已完成 |
+| `getIterationProgress` | 获取迭代进度摘要 |
+| `skipLowPriorityMethods` | 跳过剩余低优先级方法 |
 
 ### Git 工具
 
@@ -751,22 +810,33 @@ flowchart TB
         JDK[JDK 检查]
         MVN[Maven 检查]
         LSP[LSP 检查]
-        EA --> JDK & MVN & LSP
+        LLM[LLM 检查]
+        EA --> JDK & MVN & LSP & LLM
+    end
+
+    subgraph Framework["🚀 自研 Agent 框架"]
+        subgraph Adapters["LLM 适配器"]
+            OAI[OpenAI 适配器]
+            CLA[Claude 适配器]
+            GEM[Gemini 适配器]
+        end
+        subgraph Core["核心组件"]
+            CTX[上下文管理器<br/>消息历史]
+            REG[工具注册表<br/>反射执行]
+            EXE[Agent 执行器<br/>ReAct 循环]
+        end
+        Adapters --> EXE
+        CTX --> EXE
+        REG --> EXE
     end
 
     subgraph Orchestrator["🎯 Agent 编排器"]
-        AO[AgentOrchestrator]
+        SAO[SimpleAgentOrchestrator]
+        CFE[CoverageFeedbackEngine<br/>覆盖率反馈]
         RE[RetryExecutor<br/>指数退避重试]
-        SRH[StreamingResponseHandler<br/>实时流式输出]
-        RT[RepairTracker<br/>修复追踪]
+        SH[StreamingHandler<br/>实时输出]
         DPB[DynamicPromptBuilder<br/>动态提示词]
-        AO --> RE & SRH & RT & DPB
-    end
-
-    subgraph AI["🤖 LangChain4j AI 服务"]
-        SCM[流式聊天模型]
-        TE[工具执行]
-        MEM[对话记忆]
+        SAO --> CFE & RE & SH & DPB
     end
 
     subgraph Tools["🛠️ 工具层"]
@@ -788,25 +858,22 @@ flowchart TB
             GIT[GitDiffTool]
             PS[ProjectScannerTool]
         end
-        subgraph KBTools["知识库"]
-            KB[KnowledgeBaseTool]
-            CFE[CoverageFeedbackEngine]
+        subgraph IterTools["迭代测试"]
+            MIT[MethodIteratorTool]
         end
     end
 
     CLI --> CL
     CV --> EA
-    EA --> AO
-    AO --> SCM
-    SCM --> TE
-    TE --> Tools
-    MEM -.-> SCM
+    EA --> SAO
+    SAO --> EXE
+    EXE --> Tools
 
     style Input fill:#e1f5fe
     style Config fill:#fff3e0
     style Audit fill:#f3e5f5
-    style Orchestrator fill:#e8f5e9
-    style AI fill:#fce4ec
+    style Framework fill:#e8f5e9
+    style Orchestrator fill:#fce4ec
     style Tools fill:#f5f5f5
 ```
 
@@ -816,10 +883,21 @@ flowchart TB
 |------|------|------|
 | **输入层** | CLI | 基于 picocli 的命令行界面 |
 | **配置层** | ConfigLoader | 支持环境变量的 YAML 配置 |
-| **环境审计** | EnvironmentChecker | 验证 JDK、Maven、LSP 可用性 |
-| **编排器** | AgentOrchestrator | 核心循环，支持重试和流式输出 |
-| **AI 服务** | LangChain4j | 流式对话与工具执行 |
+| **环境审计** | EnvironmentChecker | 验证 JDK、Maven、LSP、LLM 可用性 |
+| **Agent 框架** | 自研轻量级框架 | 多 LLM 支持的 ReAct 循环 |
+| **编排器** | SimpleAgentOrchestrator | 核心循环，支持重试和流式输出 |
+| **反馈引擎** | CoverageFeedbackEngine | 智能覆盖率分析和改进建议 |
 | **工具层** | 15+ 工具 | 文件、代码、构建、Git、覆盖率操作 |
+
+### 自研框架 vs LangChain4j
+
+| 对比项 | 自研框架 (v1.1.0) | LangChain4j (v1.0.0) |
+|--------|-------------------|----------------------|
+| **JAR 大小** | ~15MB | ~30MB |
+| **依赖数** | 8 核心 | 20+ |
+| **智谱 AI** | 完全支持，已修复 1214 | 部分支持，消息格式问题 |
+| **上下文控制** | 精细控制 | 有限 |
+| **启动时间** | 更快 | 较慢 |
 
 ## 故障排除
 
@@ -858,16 +936,25 @@ java -jar utagent.jar config --api-key "your-key"
 mvn clean test jacoco:report
 ```
 
-#### 4. 速率限制超出
+#### 4. 速率限制超出 (1302 错误)
 
-**错误：** `Rate limit exceeded`
+**错误：** `您当前使用该API的并发数过高`
 
 **解决方案：**
 - Agent 会自动使用指数退避重试
 - 如需要可增加 `--timeout` 和 `--max-retries`
 - 考虑使用更高级别的 API 套餐
+- 在请求之间增加延迟
 
-#### 5. 测试编译失败
+#### 5. 智谱 AI 1214 错误（v1.1.0 已修复）
+
+**错误：** `messages 参数非法`
+
+**解决方案：**
+- 升级到 v1.1.0
+- 自研框架（v1.1.0 默认）正确处理智谱 AI 消息格式
+
+#### 7. 测试编译失败
 
 **错误：** `Compilation failed`
 
@@ -918,24 +1005,32 @@ mvn test -Dtest=FileSystemToolTest
 ```
 unit-test-agent-4j/
 ├── src/main/java/com/codelogickeep/agent/ut/
-│   ├── cli/              # CLI 入口
 │   ├── config/           # 配置加载与验证
-│   ├── engine/           # 核心编排
-│   │   ├── AgentOrchestrator.java
-│   │   ├── RetryExecutor.java
-│   │   ├── StreamingResponseHandler.java
-│   │   ├── DynamicPromptBuilder.java
-│   │   └── RepairTracker.java
+│   ├── engine/           # 核心引擎
+│   │   ├── CoverageFeedbackEngine.java  # 智能覆盖率分析
+│   │   ├── RetryExecutor.java           # 指数退避重试
+│   │   ├── EnvironmentChecker.java      # 环境验证
+│   │   ├── BatchAnalyzer.java           # 批量模式分析
+│   │   └── DynamicPromptBuilder.java    # 上下文感知提示词
+│   ├── framework/        # 自研轻量级框架 (v1.1.0)
+│   │   ├── adapter/      # LLM 适配器 (OpenAI, Claude, Gemini, 智谱)
+│   │   ├── context/      # 上下文管理
+│   │   ├── executor/     # ReAct 循环执行器
+│   │   ├── model/        # 消息模型、迭代统计
+│   │   └── tool/         # 工具注册与执行
 │   ├── exception/        # 自定义异常
-│   └── tools/            # Agent 工具
+│   └── tools/            # Agent 工具 (15+)
 │       ├── FileSystemTool.java
 │       ├── CodeAnalyzerTool.java
 │       ├── CoverageTool.java
-│       ├── GitDiffTool.java
+│       ├── BoundaryAnalyzerTool.java
+│       ├── MutationTestTool.java
+│       ├── MethodIteratorTool.java
 │       └── ...
 ├── src/test/java/        # 单元测试
 ├── doc/                  # 文档
 ├── prompts/              # 提示词模板
+├── result/               # 生成的报告（自动创建）
 └── pom.xml
 ```
 

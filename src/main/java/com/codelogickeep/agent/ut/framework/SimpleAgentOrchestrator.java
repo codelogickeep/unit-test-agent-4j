@@ -49,7 +49,7 @@ public class SimpleAgentOrchestrator {
 
     // 迭代统计
     private IterationStats iterationStats;
-    
+
     // 覆盖率反馈引擎
     private CoverageFeedbackEngine feedbackEngine;
 
@@ -65,7 +65,7 @@ public class SimpleAgentOrchestrator {
 
         log.info("SimpleAgentOrchestrator initialized with {} tools", toolRegistry.size());
     }
-    
+
     /**
      * 初始化覆盖率反馈引擎
      */
@@ -73,7 +73,7 @@ public class SimpleAgentOrchestrator {
         CoverageTool coverageTool = null;
         BoundaryAnalyzerTool boundaryTool = null;
         MutationTestTool mutationTool = null;
-        
+
         for (Object tool : tools) {
             if (tool instanceof CoverageTool) {
                 coverageTool = (CoverageTool) tool;
@@ -83,7 +83,7 @@ public class SimpleAgentOrchestrator {
                 mutationTool = (MutationTestTool) tool;
             }
         }
-        
+
         if (coverageTool != null && boundaryTool != null && mutationTool != null) {
             this.feedbackEngine = new CoverageFeedbackEngine(coverageTool, boundaryTool, mutationTool);
             log.info("CoverageFeedbackEngine initialized");
@@ -394,18 +394,18 @@ public class SimpleAgentOrchestrator {
                 targetFile,
                 methodInfo.methodName, methodInfo.priority,
                 methodInfo.lineCoverage, methodInfo.branchCoverage));
-        
+
         // 添加覆盖率反馈建议（如果有）
         if (currentPreCheck != null && currentPreCheck.getFeedbackResult() != null) {
             CoverageFeedbackEngine.FeedbackResult feedback = currentPreCheck.getFeedbackResult();
             List<CoverageFeedbackEngine.ImprovementSuggestion> suggestions = feedback.getImprovements();
-            
+
             // 查找与当前方法相关的建议
             List<CoverageFeedbackEngine.ImprovementSuggestion> methodSuggestions = suggestions.stream()
                     .filter(s -> s.getMethodName() != null && s.getMethodName().contains(methodInfo.methodName))
                     .limit(5)
                     .collect(java.util.stream.Collectors.toList());
-            
+
             if (!methodSuggestions.isEmpty()) {
                 prompt.append("**📊 Feedback Analysis Suggestions:**\n");
                 for (CoverageFeedbackEngine.ImprovementSuggestion s : methodSuggestions) {
@@ -413,13 +413,13 @@ public class SimpleAgentOrchestrator {
                 }
                 prompt.append("\n");
             }
-            
+
             // 添加边界测试建议
             List<CoverageFeedbackEngine.ImprovementSuggestion> boundarySuggestions = suggestions.stream()
                     .filter(s -> s.getType() == CoverageFeedbackEngine.SuggestionType.BOUNDARY_TEST)
                     .limit(3)
                     .collect(java.util.stream.Collectors.toList());
-            
+
             if (!boundarySuggestions.isEmpty()) {
                 prompt.append("**🎯 Boundary Test Suggestions:**\n");
                 for (CoverageFeedbackEngine.ImprovementSuggestion s : boundarySuggestions) {
@@ -428,7 +428,7 @@ public class SimpleAgentOrchestrator {
                 prompt.append("\n");
             }
         }
-        
+
         prompt.append(String.format("""
                 **Your Task:**
                 1. Read the current test file (readFile)
@@ -446,7 +446,7 @@ public class SimpleAgentOrchestrator {
 
                 After completing, STOP.
                 """, methodInfo.methodName));
-        
+
         return prompt.toString();
     }
 
@@ -625,12 +625,12 @@ public class SimpleAgentOrchestrator {
             Path resultDir = Paths.get(projectRoot, "result");
             try {
                 Files.createDirectories(resultDir);
-                
+
                 // 添加反馈历史到统计
                 if (feedbackEngine != null) {
                     iterationStats.setFeedbackSummary(feedbackEngine.getIterationSummary());
                 }
-                
+
                 iterationStats.saveReport(resultDir);
             } catch (IOException e) {
                 log.error("Failed to create result directory: {}", e.getMessage());
@@ -958,11 +958,11 @@ public class SimpleAgentOrchestrator {
                     .sorted((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()))
                     .collect(java.util.stream.Collectors.toList());
         }
-        
+
         void setFeedbackResult(CoverageFeedbackEngine.FeedbackResult result) {
             this.feedbackResult = result;
         }
-        
+
         CoverageFeedbackEngine.FeedbackResult getFeedbackResult() {
             return feedbackResult;
         }
@@ -1081,20 +1081,22 @@ public class SimpleAgentOrchestrator {
                 String className = extractClassName(targetFile);
                 int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
                 feedbackResult = feedbackEngine.runFeedbackCycle(projectRoot, className, threshold);
-                
+
                 if (feedbackResult != null) {
                     System.out.println("✅ Feedback analysis complete:");
                     System.out.println("   Current coverage: " + feedbackResult.getCurrentCoverage() + "%");
                     System.out.println("   Target: " + feedbackResult.getTargetCoverage() + "%");
                     System.out.println("   Status: " + (feedbackResult.isTargetMet() ? "✓ TARGET MET" : "✗ NOT MET"));
-                    
+
                     if (!feedbackResult.isTargetMet()) {
-                        List<CoverageFeedbackEngine.ImprovementSuggestion> improvements = feedbackResult.getImprovements();
+                        List<CoverageFeedbackEngine.ImprovementSuggestion> improvements = feedbackResult
+                                .getImprovements();
                         if (!improvements.isEmpty()) {
                             System.out.println("   Improvement suggestions:");
                             for (int i = 0; i < Math.min(5, improvements.size()); i++) {
                                 CoverageFeedbackEngine.ImprovementSuggestion s = improvements.get(i);
-                                System.out.printf("   - [%s] %s: %s%n", s.getPriority(), s.getType(), s.getDescription());
+                                System.out.printf("   - [%s] %s: %s%n", s.getPriority(), s.getType(),
+                                        s.getDescription());
                             }
                             if (improvements.size() > 5) {
                                 System.out.println("   ... and " + (improvements.size() - 5) + " more suggestions");

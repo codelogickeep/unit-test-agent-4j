@@ -13,6 +13,9 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 - 🔧 **Better Zhipu AI Support** - Fixed message format issues (1214 error)
 - 📊 **Improved Context Management** - Smart message trimming that maintains valid conversation sequence
 - ⚡ **Reduced Dependencies** - Lighter JAR size (~50% smaller)
+- 🔬 **Coverage Feedback Engine** - Intelligent analysis with boundary detection and improvement suggestions
+- 📈 **Iteration Statistics & Reports** - Detailed Markdown reports with coverage trends and token usage
+- 🔄 **Enhanced Retry Mechanism** - Better error handling with automatic retry on LLM failures
 
 ## Table of Contents
 
@@ -44,8 +47,10 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 | **Exponential Backoff Retry** | Handles API rate limits with intelligent retry logic |
 | **RAG Knowledge Base** | Retrieves existing tests and docs to ensure consistent code style |
 | **Coverage-Driven Enhancement** | Analyzes uncovered methods and supplements tests automatically |
+| **Coverage Feedback Engine** | Intelligent feedback with boundary analysis and improvement suggestions |
 | **Git Incremental Detection** | Only generates tests for changed files (uncommitted/staged/between refs) |
 | **Mutation Testing** | Integrates PITest to assess test effectiveness |
+| **Statistics & Reports** | Generates detailed Markdown reports with token usage and coverage trends |
 | **LSP Syntax Checking** | Optional Eclipse JDT Language Server integration for semantic analysis (auto-download) |
 | **Pre-compile Validation** | JavaParser-based fast syntax checking before compilation |
 | **Iterative Method Testing** | Generate tests one method at a time with priority-based ordering |
@@ -770,6 +775,20 @@ The agent has access to the following tools:
 | `checkCoverageThreshold` | Check if class meets coverage threshold |
 | `getMethodCoverageDetails` | Get method-level coverage details |
 | `getSingleMethodCoverage` | Get coverage for a single method (iterative mode) |
+| `getUncoveredMethods` | Get list of uncovered methods below threshold |
+
+### Coverage Feedback Engine
+
+The `CoverageFeedbackEngine` provides intelligent analysis and improvement suggestions:
+
+| Feature | Description |
+|---------|-------------|
+| **Feedback Cycle** | Analyzes coverage, identifies uncovered areas, generates prioritized suggestions |
+| **Boundary Analysis** | Integrates with `BoundaryAnalyzerTool` to identify boundary test opportunities |
+| **Mutation Analysis** | Optionally integrates with `MutationTestTool` to assess test effectiveness |
+| **Improvement Suggestions** | Prioritized suggestions: MISSING_TEST, BOUNDARY_TEST, MUTATION_SURVIVOR |
+| **Iteration History** | Tracks coverage progress across multiple iterations |
+| **Smart Stopping** | Detects when no progress is being made and stops iterating |
 
 ### Git Tools
 
@@ -1016,26 +1035,31 @@ mvn test -Dtest=FileSystemToolTest
 unit-test-agent-4j/
 ├── src/main/java/com/codelogickeep/agent/ut/
 │   ├── config/           # Configuration loading & validation
-│   ├── engine/           # Legacy orchestration (LangChain4j)
-│   │   ├── AgentOrchestrator.java
-│   │   ├── RetryExecutor.java
-│   │   └── EnvironmentChecker.java
+│   ├── engine/           # Core engines
+│   │   ├── CoverageFeedbackEngine.java  # Intelligent coverage analysis
+│   │   ├── RetryExecutor.java           # Exponential backoff retry
+│   │   ├── EnvironmentChecker.java      # Environment validation
+│   │   ├── BatchAnalyzer.java           # Batch mode analysis
+│   │   └── DynamicPromptBuilder.java    # Context-aware prompts
 │   ├── framework/        # Custom lightweight framework (v1.1.0)
 │   │   ├── adapter/      # LLM adapters (OpenAI, Claude, Gemini)
 │   │   ├── context/      # Context management
 │   │   ├── executor/     # ReAct loop executor
-│   │   ├── model/        # Message models
+│   │   ├── model/        # Message models, IterationStats
 │   │   └── tool/         # Tool registry & execution
 │   ├── exception/        # Custom exceptions
-│   └── tools/            # Agent tools
+│   └── tools/            # Agent tools (15+)
 │       ├── FileSystemTool.java
 │       ├── CodeAnalyzerTool.java
 │       ├── CoverageTool.java
+│       ├── BoundaryAnalyzerTool.java
+│       ├── MutationTestTool.java
 │       ├── MethodIteratorTool.java
 │       └── ...
 ├── src/test/java/        # Unit tests
 ├── doc/                  # Documentation
 ├── prompts/              # Prompt templates
+├── result/               # Generated reports (auto-created)
 └── pom.xml
 ```
 
