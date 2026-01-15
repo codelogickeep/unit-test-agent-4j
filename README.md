@@ -926,6 +926,90 @@ flowchart TB
 | **Context Control** | Fine-grained | Limited |
 | **Startup Time** | Faster | Slower |
 
+### CoverageFeedbackEngine Integration
+
+The `CoverageFeedbackEngine` provides intelligent coverage analysis integrated into the test generation workflow:
+
+```mermaid
+flowchart TB
+    subgraph PreCheck["🔍 Pre-check Phase"]
+        PC1[Step 1: Check Test File]
+        PC2[Step 2: Clean & Test]
+        PC3[Step 3: Coverage Analysis]
+        PC4[Step 4: Feedback Analysis]
+        PC1 --> PC2 --> PC3 --> PC4
+    end
+
+    subgraph FeedbackEngine["🔬 CoverageFeedbackEngine"]
+        CFE[runFeedbackCycle]
+        
+        subgraph Analysis["Analysis Components"]
+            COV[CoverageTool<br/>Coverage Data]
+            BND[BoundaryAnalyzerTool<br/>Boundary Detection]
+            MUT[MutationTestTool<br/>Test Effectiveness]
+        end
+        
+        subgraph Output["Feedback Output"]
+            SUG[Improvement Suggestions<br/>Prioritized List]
+            ACT[Next Action<br/>Recommendation]
+            HIS[Iteration History<br/>Progress Tracking]
+        end
+        
+        CFE --> COV & BND & MUT
+        COV & BND & MUT --> SUG
+        SUG --> ACT
+        CFE --> HIS
+    end
+
+    subgraph MethodIteration["🔄 Method Iteration Phase"]
+        MI1[Get Next Method]
+        MI2[Build Targeted Prompt<br/>+ Feedback Suggestions]
+        MI3[LLM Test Generation]
+        MI4[Compile & Run Tests]
+        MI5[Verify Coverage]
+        MI6[Complete Method]
+        
+        MI1 --> MI2 --> MI3 --> MI4 --> MI5 --> MI6
+        MI6 -->|Next Method| MI1
+    end
+
+    subgraph Report["📊 Report Generation"]
+        RPT1[Iteration Stats]
+        RPT2[Coverage Trends]
+        RPT3[Token Usage]
+        RPT4[Feedback History]
+        RPT1 & RPT2 & RPT3 & RPT4 --> MD[Markdown Report]
+    end
+
+    PC4 --> FeedbackEngine
+    FeedbackEngine -->|Suggestions| MI2
+    FeedbackEngine -->|History| RPT4
+    MI6 -->|Stats| RPT1
+
+    style PreCheck fill:#e3f2fd
+    style FeedbackEngine fill:#e8f5e9
+    style MethodIteration fill:#fff3e0
+    style Report fill:#fce4ec
+```
+
+**Workflow Integration Points:**
+
+| Phase | Integration | Description |
+|-------|-------------|-------------|
+| **Pre-check** | Initial Analysis | Runs `runFeedbackCycle()` to get baseline coverage and suggestions |
+| **Method Prompt** | Targeted Suggestions | Injects method-specific and boundary test suggestions into LLM prompt |
+| **Iteration Control** | Smart Stopping | Uses `shouldContinueIterating()` to detect stagnation |
+| **Report** | History Summary | Includes `getIterationSummary()` in final Markdown report |
+
+**Suggestion Types:**
+
+| Type | Priority | Description |
+|------|----------|-------------|
+| `MISSING_TEST` | HIGH | Uncovered method needs tests |
+| `BOUNDARY_TEST` | MEDIUM | Boundary conditions identified |
+| `MUTATION_SURVIVOR` | HIGH | Mutation survived - strengthen assertions |
+| `WEAK_ASSERTION` | LOW | Assertions could be stronger |
+
 ## Troubleshooting
 
 ### Common Issues

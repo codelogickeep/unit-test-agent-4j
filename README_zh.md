@@ -899,6 +899,90 @@ flowchart TB
 | **上下文控制** | 精细控制 | 有限 |
 | **启动时间** | 更快 | 较慢 |
 
+### CoverageFeedbackEngine 集成架构
+
+`CoverageFeedbackEngine` 提供智能覆盖率分析，集成到测试生成工作流中：
+
+```mermaid
+flowchart TB
+    subgraph PreCheck["🔍 预检查阶段"]
+        PC1[步骤 1: 检查测试文件]
+        PC2[步骤 2: 清理并测试]
+        PC3[步骤 3: 覆盖率分析]
+        PC4[步骤 4: 反馈分析]
+        PC1 --> PC2 --> PC3 --> PC4
+    end
+
+    subgraph FeedbackEngine["🔬 CoverageFeedbackEngine"]
+        CFE[runFeedbackCycle]
+        
+        subgraph Analysis["分析组件"]
+            COV[CoverageTool<br/>覆盖率数据]
+            BND[BoundaryAnalyzerTool<br/>边界检测]
+            MUT[MutationTestTool<br/>测试有效性]
+        end
+        
+        subgraph Output["反馈输出"]
+            SUG[改进建议<br/>优先级排序]
+            ACT[推荐行动]
+            HIS[迭代历史<br/>进度跟踪]
+        end
+        
+        CFE --> COV & BND & MUT
+        COV & BND & MUT --> SUG
+        SUG --> ACT
+        CFE --> HIS
+    end
+
+    subgraph MethodIteration["🔄 方法迭代阶段"]
+        MI1[获取下一个方法]
+        MI2[构建目标提示词<br/>+ 反馈建议]
+        MI3[LLM 生成测试]
+        MI4[编译并运行测试]
+        MI5[验证覆盖率]
+        MI6[完成方法]
+        
+        MI1 --> MI2 --> MI3 --> MI4 --> MI5 --> MI6
+        MI6 -->|下一个方法| MI1
+    end
+
+    subgraph Report["📊 报告生成"]
+        RPT1[迭代统计]
+        RPT2[覆盖率趋势]
+        RPT3[Token 使用]
+        RPT4[反馈历史]
+        RPT1 & RPT2 & RPT3 & RPT4 --> MD[Markdown 报告]
+    end
+
+    PC4 --> FeedbackEngine
+    FeedbackEngine -->|建议| MI2
+    FeedbackEngine -->|历史| RPT4
+    MI6 -->|统计| RPT1
+
+    style PreCheck fill:#e3f2fd
+    style FeedbackEngine fill:#e8f5e9
+    style MethodIteration fill:#fff3e0
+    style Report fill:#fce4ec
+```
+
+**工作流集成点：**
+
+| 阶段 | 集成方式 | 说明 |
+|------|---------|------|
+| **预检查** | 初始分析 | 运行 `runFeedbackCycle()` 获取基准覆盖率和建议 |
+| **方法提示词** | 定向建议 | 将方法特定和边界测试建议注入 LLM 提示词 |
+| **迭代控制** | 智能停止 | 使用 `shouldContinueIterating()` 检测停滞 |
+| **报告** | 历史摘要 | 在最终 Markdown 报告中包含 `getIterationSummary()` |
+
+**建议类型：**
+
+| 类型 | 优先级 | 说明 |
+|------|--------|------|
+| `MISSING_TEST` | 高 | 未覆盖方法需要测试 |
+| `BOUNDARY_TEST` | 中 | 识别到边界条件 |
+| `MUTATION_SURVIVOR` | 高 | 变异存活 - 加强断言 |
+| `WEAK_ASSERTION` | 低 | 断言可以更强 |
+
 ## 故障排除
 
 ### 常见问题
