@@ -200,12 +200,13 @@ public class SimpleAgentOrchestrator {
 
             // 检查是否已达到覆盖率要求
             if (methodInfo.lineCoverage >= coverageThreshold) {
-                log.info("📊 Method {} already has {}% coverage (threshold: {}%)", 
+                log.info("📊 Method {} already has {}% coverage (threshold: {}%)",
                         methodInfo.methodName, String.format("%.1f", methodInfo.lineCoverage), coverageThreshold);
-                
+
                 // 覆盖率已达标，直接跳过该方法
                 log.info("✅ Method {} coverage sufficient - SKIPPING", methodInfo.methodName);
-                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.lineCoverage) + "% >= " + coverageThreshold + "%");
+                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.lineCoverage) + "% >= "
+                        + coverageThreshold + "%");
                 currentMethodStats.complete("SKIPPED", methodInfo.lineCoverage);
                 skippedCount++;
                 continue;
@@ -288,46 +289,6 @@ public class SimpleAgentOrchestrator {
         // ===== 生成报告 =====
         String agentDir = getAgentRunDirectory();
         generateReport(agentDir);
-    }
-
-    /**
-     * 为特定方法执行变异测试
-     * 
-     * @return true 如果方法可以跳过（变异测试通过或PITest未配置但覆盖率已达标）
-     */
-    private boolean runMutationTestForMethod(String projectRoot, String methodName, double currentCoverage,
-            int threshold) {
-        try {
-            log.info("🧬 Running mutation test for method: {}", methodName);
-
-            // 检查是否配置了 PITest
-            String configCheck = toolRegistry.invoke("checkPitestConfiguration",
-                    Map.of("projectPath", projectRoot));
-
-            if (configCheck.contains("PITest Plugin Configured: NO")) {
-                // PITest 未配置时，如果覆盖率已达到阈值，则跳过
-                if (currentCoverage >= threshold) {
-                    log.info("⚠️ PITest not configured, but coverage {}% >= threshold {}%, skipping method",
-                            String.format("%.1f", currentCoverage), threshold);
-                    return true;
-                }
-                log.info("⚠️ PITest not configured and coverage {}% < threshold {}%, will generate tests",
-                        String.format("%.1f", currentCoverage), threshold);
-                return false;
-            }
-
-            // PITest 已配置，执行变异测试
-            // 注意：实际生产环境应该执行完整的变异测试
-            // 这里简化为：如果覆盖率达到阈值就认为通过
-            log.info("✅ PITest configured, method {} has {}% coverage, assuming mutation test passed",
-                    methodName, String.format("%.1f", currentCoverage));
-            return true;
-
-        } catch (Exception e) {
-            log.warn("Mutation test check failed for {}: {}", methodName, e.getMessage());
-            // 发生异常时，如果覆盖率已达标，仍然跳过
-            return currentCoverage >= threshold;
-        }
     }
 
     /**
@@ -490,16 +451,27 @@ public class SimpleAgentOrchestrator {
         }
 
         // Token 趋势分析
-        if (methods.size() >= 3) {
-            int firstThreeCount = Math.min(3, methods.size());
-            int firstThreeSum = methods.subList(0, firstThreeCount).stream()
+        long skippedCount = methods.stream().filter(IterationStats.MethodStats::isSkipped).count();
+        long processedCount = totalMethods - skippedCount;
+        
+        if (skippedCount > 0) {
+            System.out.printf("⏭️ 跳过方法: %d (覆盖率已达标)%n", skippedCount);
+        }
+        
+        if (processedCount >= 3) {
+            // 只统计实际处理的方法（非跳过）
+            List<IterationStats.MethodStats> processedMethods = methods.stream()
+                    .filter(m -> !m.isSkipped())
+                    .collect(java.util.stream.Collectors.toList());
+            
+            int firstThreeCount = Math.min(3, processedMethods.size());
+            int firstThreeSum = processedMethods.subList(0, firstThreeCount).stream()
                     .mapToInt(m -> m.getPromptTokens())
                     .sum();
-            int lastThreeSum = methods.subList(Math.max(0, methods.size() - 3), methods.size()).stream()
+            int lastThreeSum = processedMethods.subList(Math.max(0, processedMethods.size() - 3), processedMethods.size()).stream()
                     .mapToInt(m -> m.getPromptTokens())
                     .sum();
 
-            // 避免除零
             if (firstThreeCount > 0 && firstThreeSum > 0) {
                 int firstThreeAvg = firstThreeSum / firstThreeCount;
                 int lastThreeAvg = lastThreeSum / firstThreeCount;
@@ -510,9 +482,11 @@ public class SimpleAgentOrchestrator {
                 } else {
                     System.out.println("ℹ️ Token 使用保持稳定");
                 }
-            } else {
-                System.out.println("ℹ️ Token 统计数据不足");
             }
+        } else if (processedCount > 0) {
+            System.out.printf("ℹ️ 实际处理 %d 个方法 (需 ≥3 个方法才能分析 Token 趋势)%n", processedCount);
+        } else if (skippedCount == totalMethods) {
+            System.out.println("✅ 所有方法覆盖率已达标，无需生成新测试");
         }
 
         System.out.println("=".repeat(60));
@@ -862,58 +836,51 @@ public class SimpleAgentOrchestrator {
             return PreCheckResult.failure("Cannot determine project root from target file: " + targetFile);
         }
 
-        // Step 1: 编译工程
-        System.out.println("\n📦 Step 1: Compiling project...");
-        try {
-            Map<String, Object> emptyArgs = new HashMap<>();
-            String compileResult = toolRegistry.invoke("compileProject", emptyArgs);
-            if (compileResult.contains("exitCode=0") || compileResult.contains("\"exitCode\":0")) {
-                System.out.println("✅ Compilation successful");
-            } else if (compileResult.contains("ERROR") || compileResult.contains("exitCode=1")) {
-                System.err.println("❌ Compilation failed!");
-                return PreCheckResult.failure("Compilation failed:\n" + compileResult);
-            } else {
-                System.out.println("✅ Compilation completed");
-            }
-        } catch (Exception e) {
-            log.error("Failed to compile project", e);
-            return PreCheckResult.failure("Compilation error: " + e.getMessage());
-        }
-
-        // Step 2: 检查测试文件是否存在
-        System.out.println("\n📄 Step 2: Checking for existing test file...");
+        // Step 1: 检查测试文件是否存在
+        System.out.println("\n📄 Step 1: Checking for existing test file...");
         String testFilePath = calculateTestFilePath(targetFile);
         boolean hasExistingTests = Files.exists(Paths.get(testFilePath));
 
         if (hasExistingTests) {
             System.out.println("✅ Found existing test file: " + testFilePath);
         } else {
-            System.out.println("ℹ️ No existing test file found. Will create new tests.");
+            System.out.println("ℹ️ No existing test file found. Will compile and create new tests.");
+            // 没有测试文件时，只编译不执行测试
+            try {
+                Map<String, Object> emptyArgs = new HashMap<>();
+                String compileResult = toolRegistry.invoke("compileProject", emptyArgs);
+                if (compileResult.contains("ERROR") || compileResult.contains("exitCode=1")) {
+                    System.err.println("❌ Compilation failed!");
+                    return PreCheckResult.failure("Compilation failed:\n" + compileResult);
+                }
+                System.out.println("✅ Compilation successful");
+            } catch (Exception e) {
+                log.error("Failed to compile project", e);
+                return PreCheckResult.failure("Compilation error: " + e.getMessage());
+            }
             return PreCheckResult.success(null, false, null);
         }
 
-        // Step 3: 执行测试并获取覆盖率
-        System.out.println("\n🧪 Step 3: Running existing tests and collecting coverage...");
+        // Step 2: 清理并执行测试，生成最新覆盖率数据
+        System.out.println("\n🧪 Step 2: Running 'clean test' to generate fresh coverage data...");
         try {
-            String className = extractClassName(targetFile);
-            String testClassName = className + "Test";
-
-            Map<String, Object> testArgs = new HashMap<>();
-            testArgs.put("testClass", testClassName);
-            String testResult = toolRegistry.invoke("executeTest", testArgs);
+            Map<String, Object> emptyArgs = new HashMap<>();
+            String testResult = toolRegistry.invoke("cleanAndTest", emptyArgs);
 
             if (testResult.contains("exitCode=0") || testResult.contains("\"exitCode\":0")) {
-                System.out.println("✅ All existing tests passed");
-            } else {
+                System.out.println("✅ Clean and test completed successfully");
+            } else if (testResult.contains("ERROR") || testResult.contains("exitCode=1")) {
                 System.out.println("⚠️ Some tests may have failed, continuing with coverage analysis...");
+            } else {
+                System.out.println("✅ Test execution completed");
             }
         } catch (Exception e) {
             log.warn("Failed to execute tests: {}", e.getMessage());
             System.out.println("⚠️ Could not run tests: " + e.getMessage());
         }
 
-        // Step 4: 获取覆盖率报告
-        System.out.println("\n📊 Step 4: Analyzing coverage...");
+        // Step 3: 获取覆盖率报告
+        System.out.println("\n📊 Step 3: Analyzing coverage...");
         String coverageInfo = null;
         String uncoveredMethods = null;
         List<MethodCoverageInfo> methodCoverages = new ArrayList<>();

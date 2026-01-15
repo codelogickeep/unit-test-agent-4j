@@ -184,4 +184,28 @@ public class MavenExecutorTool implements AgentTool {
         log.info("Tool Output - executeTest: exitCode={}", result.exitCode());
         return result;
     }
+    
+    @Tool("Clean and run all tests to generate fresh coverage data. Use this before analyzing coverage.")
+    public ExecutionResult cleanAndTest() throws IOException, InterruptedException {
+        log.info("Tool Input - cleanAndTest");
+        List<String> command = new ArrayList<>();
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        if (isWindows) {
+            String shell = getShell();
+            command.add(shell);
+            command.add(shell.contains("powershell") || shell.contains("pwsh") ? "-Command" : "/c");
+            command.add("mvn");
+        } else {
+            command.add("mvn");
+        }
+
+        // Clean and test to generate fresh coverage data
+        command.add("clean");
+        command.add("test");
+        command.add("-B");
+
+        ExecutionResult result = executeCommand(command);
+        log.info("Tool Output - cleanAndTest: exitCode={}", result.exitCode());
+        return result;
+    }
 }
