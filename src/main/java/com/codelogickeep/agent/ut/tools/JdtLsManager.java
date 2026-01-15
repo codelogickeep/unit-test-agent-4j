@@ -31,7 +31,7 @@ public class JdtLsManager {
 
     // 本地目录名
     private static final String JDTLS_DIR_NAME = "jdtls";
-    
+
     // 本地缓存目录（用于从项目中复制预下载的 JDT LS）
     private static final String LOCAL_CACHE_DIR = "jdt-lsp";
     private static final String JDTLS_ARCHIVE_NAME = "jdt-language-server-1.50.0-202509041425.tar.gz";
@@ -415,28 +415,28 @@ public class JdtLsManager {
     private Path tryFindLocalArchive() {
         // 可能的本地缓存位置
         List<Path> searchPaths = new ArrayList<>();
-        
+
         // 当前工作目录下的 jdt-lsp
         searchPaths.add(Paths.get(System.getProperty("user.dir"), LOCAL_CACHE_DIR, JDTLS_ARCHIVE_NAME));
-        
+
         // Agent 目录下的 jdt-lsp
         searchPaths.add(agentDir.resolve(LOCAL_CACHE_DIR).resolve(JDTLS_ARCHIVE_NAME));
-        
+
         // 用户目录下的 .utagent/jdt-lsp
         searchPaths.add(Paths.get(System.getProperty("user.home"), ".utagent", LOCAL_CACHE_DIR, JDTLS_ARCHIVE_NAME));
-        
+
         // 也检查简化名称
         String simpleName = "jdt-language-server-1.50.0.tar.gz";
         searchPaths.add(Paths.get(System.getProperty("user.dir"), LOCAL_CACHE_DIR, simpleName));
         searchPaths.add(agentDir.resolve(LOCAL_CACHE_DIR).resolve(simpleName));
-        
+
         for (Path path : searchPaths) {
             if (Files.exists(path) && Files.isRegularFile(path)) {
                 log.debug("Found local JDT LS archive at: {}", path);
                 return path;
             }
         }
-        
+
         log.debug("No local JDT LS archive found in search paths");
         return null;
     }
