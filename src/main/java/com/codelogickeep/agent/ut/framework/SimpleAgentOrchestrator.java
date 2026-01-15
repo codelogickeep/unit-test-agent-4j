@@ -328,10 +328,17 @@ public class SimpleAgentOrchestrator {
                     continue;
                 }
 
-                // 解析最终覆盖率
+                // 解析最终覆盖率 - 先从 LLM 响应中提取
                 double finalCoverage = extractCoverage(content);
+                
+                // 如果没有从响应中获取到，直接调用工具获取实际覆盖率
                 if (finalCoverage <= 0) {
-                    finalCoverage = methodInfo.lineCoverage; // 使用初始值
+                    finalCoverage = getActualMethodCoverage(projectRoot, targetFile, methodInfo.methodName);
+                }
+                
+                // 如果仍然获取不到，使用初始值
+                if (finalCoverage <= 0) {
+                    finalCoverage = methodInfo.lineCoverage;
                 }
 
                 // 判断结果
@@ -657,15 +664,67 @@ public class SimpleAgentOrchestrator {
      * 从输出中提取覆盖率
      */
     private double extractCoverage(String content) {
-        // 匹配 "coverage: 85.5%" 或 "Coverage: 85.5" 模式
-        Pattern pattern = Pattern.compile("(?:coverage|Coverage)[:\\s]+([0-9]+\\.?[0-9]*)%?");
-        Matcher matcher = pattern.matcher(content);
-        if (matcher.find()) {
-            try {
-                return Double.parseDouble(matcher.group(1));
-            } catch (NumberFormatException e) {
-                return 0;
+        if (content == null || content.isEmpty()) {
+            return 0;
+        }
+        
+        // 按优先级尝试多种匹配模式
+        String[] patterns = {
+            // 工具输出格式: "coverage=100.0" 或 "coverage: 100.0"
+            "coverage[=:]\\s*([0-9]+\\.?[0-9]*)%?",
+            // Final Coverage 格式: "**Final Coverage:** 100%"
+            "Final\\s+Coverage[:\\*\\s]+([0-9]+\\.?[0-9]*)%",
+            // line coverage 格式: "line=100.0%" 或 "Line: 100%"
+            "line[=:\\s]+([0-9]+\\.?[0-9]*)%",
+            // 通用 Coverage 格式: "Coverage: 85.5%"
+            "Coverage[:\\s]+([0-9]+\\.?[0-9]*)%?",
+            // 简单百分比: "100% coverage" 或 "100% line"
+            "([0-9]+\\.?[0-9]*)%\\s*(?:coverage|line)"
+        };
+        
+        for (String patternStr : patterns) {
+            Pattern pattern = Pattern.compile(patternStr, Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(content);
+            if (matcher.find()) {
+                try {
+                    double value = Double.parseDouble(matcher.group(1));
+                    if (value > 0 && value <= 100) {
+                        log.debug("Extracted coverage {} from pattern: {}", value, patternStr);
+                        return value;
+                    }
+                } catch (NumberFormatException e) {
+                    // 继续尝试下一个模式
+                }
             }
+        }
+        
+        return 0;
+    }
+    
+    /**
+     * 直接调用工具获取方法的实际覆盖率
+     */
+    private double getActualMethodCoverage(String projectRoot, String targetFile, String methodName) {
+        try {
+            String className = extractClassName(targetFile);
+            Map<String, Object> args = new HashMap<>();
+            args.put("modulePath", projectRoot);
+            args.put("className", className);
+            args.put("methodName", methodName);
+            
+            String result = toolRegistry.invoke("getSingleMethodCoverage", args);
+            if (result != null && !result.startsWith("ERROR")) {
+                // 解析结果格式: "methodName line=XX.X%"
+                Pattern pattern = Pattern.compile("line[=:]\\s*([0-9]+\\.?[0-9]*)%");
+                Matcher matcher = pattern.matcher(result);
+                if (matcher.find()) {
+                    double coverage = Double.parseDouble(matcher.group(1));
+                    log.info("📊 Actual coverage for {}: {}%", methodName, String.format("%.1f", coverage));
+                    return coverage;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get actual coverage for {}: {}", methodName, e.getMessage());
         }
         return 0;
     }
