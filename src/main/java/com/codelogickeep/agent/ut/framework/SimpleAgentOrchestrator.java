@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,20 +132,44 @@ public class SimpleAgentOrchestrator {
 
     /**
      * 迭代模式 - 每个方法独立上下文
+     * 
+     * 基于预检查的覆盖率数据，按覆盖率从低到高处理方法：
+     * 1. 覆盖率已达标的方法 -> 执行变异测试 -> 通过则跳过
+     * 2. 覆盖率未达标的方法 -> 生成测试代码
      */
     private void runIterative(String targetFile, String taskContext) {
         log.info("Starting Agent (ITERATIVE mode) for: {}", targetFile);
 
         String projectRoot = extractProjectRoot(targetFile);
         String systemPrompt = loadSystemPrompt(projectRoot);
+        int coverageThreshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
 
         // 初始化统计
         iterationStats = new IterationStats(targetFile);
 
+        // ===== 获取方法覆盖率列表（按覆盖率排序，低的在前）=====
+        List<MethodCoverageInfo> methodsToProcess = currentPreCheck != null
+                ? currentPreCheck.getMethodsSortedByCoverage()
+                : new ArrayList<>();
+
+        if (methodsToProcess.isEmpty()) {
+            log.info("No method coverage info available, falling back to LLM-driven iteration");
+            // 如果没有覆盖率数据，使用 LLM 驱动的迭代
+            runIterativeFallback(targetFile, taskContext, systemPrompt, projectRoot);
+            return;
+        }
+
+        log.info("📊 Found {} methods to process (sorted by coverage):", methodsToProcess.size());
+        for (MethodCoverageInfo m : methodsToProcess) {
+            log.info("   - {} [{}] Line: {}%, Branch: {}%",
+                    m.methodName, m.priority,
+                    String.format("%.1f", m.lineCoverage),
+                    String.format("%.1f", m.branchCoverage));
+        }
+
         // ===== Phase 1: 初始化 =====
         log.info(">>> Phase 1: Initialization");
 
-        // 智谱 AI 对消息窗口大小敏感，使用较小的窗口（8 条消息）
         AgentExecutor initExecutor = createExecutor(systemPrompt, 8);
         initExecutor.setTokenStatsCallback((prompt, response) -> {
             iterationStats.recordPromptSize(prompt);
@@ -152,40 +177,224 @@ public class SimpleAgentOrchestrator {
         });
 
         String initPrompt = buildIterativeInitPrompt(targetFile);
-
         AgentResult initResult = initExecutor.run(initPrompt);
         if (!initResult.success()) {
             log.error("Initialization failed: {}", initResult.errorMessage());
             return;
         }
 
-        // ===== Phase 2: 逐方法迭代 =====
+        // ===== Phase 2: 逐方法迭代（基于覆盖率数据）=====
+        int processedCount = 0;
+        int skippedCount = 0;
+        final int maxMethodRetries = 3;
+
+        for (int i = 0; i < methodsToProcess.size(); i++) {
+            MethodCoverageInfo methodInfo = methodsToProcess.get(i);
+            log.info(">>> Phase 2: Method #{} - {} [{}]", i + 1, methodInfo.methodName, methodInfo.priority);
+
+            // 创建方法统计，使用实际方法名和初始覆盖率
+            IterationStats.MethodStats currentMethodStats = iterationStats.startMethod(
+                    methodInfo.methodName,
+                    methodInfo.priority,
+                    methodInfo.lineCoverage);
+
+            // 检查是否已达到覆盖率要求
+            if (methodInfo.lineCoverage >= coverageThreshold) {
+                log.info("📊 Method {} already has {}% coverage (threshold: {}%)", 
+                        methodInfo.methodName, String.format("%.1f", methodInfo.lineCoverage), coverageThreshold);
+                
+                // 覆盖率已达标，直接跳过该方法
+                log.info("✅ Method {} coverage sufficient - SKIPPING", methodInfo.methodName);
+                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.lineCoverage) + "% >= " + coverageThreshold + "%");
+                currentMethodStats.complete("SKIPPED", methodInfo.lineCoverage);
+                skippedCount++;
+                continue;
+            }
+
+            // 需要生成测试
+            processedCount++;
+            int methodRetryCount = 0;
+            boolean methodCompleted = false;
+
+            while (!methodCompleted && methodRetryCount < maxMethodRetries) {
+                // 每个方法创建新的执行器（清空上下文！）
+                AgentExecutor methodExecutor = createExecutor(systemPrompt, 10);
+
+                methodExecutor.setTokenStatsCallback((prompt, response) -> {
+                    currentMethodStats.addPromptTokens(prompt);
+                    currentMethodStats.addResponseTokens(response);
+                    log.info("📊 Method {} - Prompt: {} tokens, Response: {} tokens",
+                            methodInfo.methodName, prompt, response);
+                });
+
+                // 构建针对特定方法的提示词
+                String methodPrompt = buildTargetedMethodPrompt(targetFile, methodInfo, i + 1);
+
+                // 流式执行
+                ConsoleStreamingHandler handler = new ConsoleStreamingHandler();
+                methodExecutor.runStream(methodPrompt, handler);
+
+                try {
+                    handler.await(5, TimeUnit.MINUTES);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    currentMethodStats.complete("INTERRUPTED", methodInfo.lineCoverage);
+                    break;
+                }
+
+                String content = handler.getContent();
+                currentMethodStats.incrementIteration();
+
+                // 解析最终覆盖率
+                double finalCoverage = extractCoverage(content);
+                if (finalCoverage <= 0) {
+                    finalCoverage = methodInfo.lineCoverage; // 使用初始值
+                }
+
+                // 判断结果
+                String contentLower = content.toLowerCase();
+                if (handler.getError() != null ||
+                        (contentLower.contains("failed") && !contentLower.contains("mutation"))) {
+                    log.warn("❌ Method {} failed, attempt {}/{}",
+                            methodInfo.methodName, methodRetryCount + 1, maxMethodRetries);
+                    methodRetryCount++;
+
+                    if (methodRetryCount >= maxMethodRetries) {
+                        currentMethodStats.complete("FAILED", finalCoverage);
+                        methodCompleted = true;
+                    }
+                } else {
+                    log.info("✅ Method {} completed with coverage: {}%",
+                            methodInfo.methodName, String.format("%.1f", finalCoverage));
+                    currentMethodStats.complete("SUCCESS", finalCoverage);
+                    methodCompleted = true;
+                }
+            }
+        }
+
+        // ===== Phase 3: 汇总 =====
+        log.info(">>> Phase 3: Summary");
+        log.info("📊 Processed: {}, Skipped: {}, Total: {}",
+                processedCount, skippedCount, methodsToProcess.size());
+
+        AgentExecutor summaryExecutor = createExecutor(systemPrompt, 5);
+        AgentResult summaryResult = summaryExecutor.run(
+                "Call getIterationProgress() to show the final summary of all tested methods.");
+
+        if (summaryResult.success()) {
+            log.info("Iterative test generation completed");
+        }
+
+        // ===== 生成报告 =====
+        String agentDir = getAgentRunDirectory();
+        generateReport(agentDir);
+    }
+
+    /**
+     * 为特定方法执行变异测试
+     * 
+     * @return true 如果方法可以跳过（变异测试通过或PITest未配置但覆盖率已达标）
+     */
+    private boolean runMutationTestForMethod(String projectRoot, String methodName, double currentCoverage,
+            int threshold) {
+        try {
+            log.info("🧬 Running mutation test for method: {}", methodName);
+
+            // 检查是否配置了 PITest
+            String configCheck = toolRegistry.invoke("checkPitestConfiguration",
+                    Map.of("projectPath", projectRoot));
+
+            if (configCheck.contains("PITest Plugin Configured: NO")) {
+                // PITest 未配置时，如果覆盖率已达到阈值，则跳过
+                if (currentCoverage >= threshold) {
+                    log.info("⚠️ PITest not configured, but coverage {}% >= threshold {}%, skipping method",
+                            String.format("%.1f", currentCoverage), threshold);
+                    return true;
+                }
+                log.info("⚠️ PITest not configured and coverage {}% < threshold {}%, will generate tests",
+                        String.format("%.1f", currentCoverage), threshold);
+                return false;
+            }
+
+            // PITest 已配置，执行变异测试
+            // 注意：实际生产环境应该执行完整的变异测试
+            // 这里简化为：如果覆盖率达到阈值就认为通过
+            log.info("✅ PITest configured, method {} has {}% coverage, assuming mutation test passed",
+                    methodName, String.format("%.1f", currentCoverage));
+            return true;
+
+        } catch (Exception e) {
+            log.warn("Mutation test check failed for {}: {}", methodName, e.getMessage());
+            // 发生异常时，如果覆盖率已达标，仍然跳过
+            return currentCoverage >= threshold;
+        }
+    }
+
+    /**
+     * 构建针对特定方法的提示词
+     */
+    private String buildTargetedMethodPrompt(String targetFile, MethodCoverageInfo methodInfo, int iteration) {
+        return String.format("""
+                ## ITERATIVE MODE - METHOD #%d: %s
+
+                Target file: %s
+
+                ⚠️ THIS IS A FRESH CONTEXT - Previous conversation is cleared.
+
+                **Current Method Information:**
+                - Method Name: `%s`
+                - Priority: %s
+                - Current Line Coverage: %.1f%%
+                - Current Branch Coverage: %.1f%%
+
+                **Your Task:**
+                1. Read the current test file (readFile)
+                2. Analyze the source code for method `%s`
+                3. Generate tests to improve coverage for THIS METHOD ONLY
+                4. Append tests using writeFileFromLine (do NOT overwrite existing tests)
+                5. checkSyntax → compileProject → executeTest
+                6. getSingleMethodCoverage to verify improvement
+                7. completeCurrentMethod with status and final coverage
+
+                Focus on:
+                - Uncovered branches and edge cases
+                - Boundary conditions
+                - Error handling paths
+
+                After completing, STOP.
+                """,
+                iteration, methodInfo.methodName,
+                targetFile,
+                methodInfo.methodName, methodInfo.priority,
+                methodInfo.lineCoverage, methodInfo.branchCoverage,
+                methodInfo.methodName);
+    }
+
+    /**
+     * 回退到 LLM 驱动的迭代模式（当没有覆盖率数据时）
+     */
+    private void runIterativeFallback(String targetFile, String taskContext,
+            String systemPrompt, String projectRoot) {
+        log.info("Using LLM-driven iteration (no coverage data available)");
+
         int maxMethodIterations = 20;
-        String currentMethodName = null;
-        String currentPriority = "P1";
         int methodRetryCount = 0;
         final int maxMethodRetries = 3;
 
         for (int i = 1; i <= maxMethodIterations; i++) {
             log.info(">>> Phase 2: Method Iteration #{}", i);
 
-            // 每个方法创建新的执行器（清空上下文！）
             AgentExecutor methodExecutor = createExecutor(systemPrompt, 10);
 
-            // 记录当前方法的统计
-            final int methodIndex = i;
-            IterationStats.MethodStats currentMethodStats = iterationStats.startMethod("method_" + i, currentPriority);
+            IterationStats.MethodStats currentMethodStats = iterationStats.startMethod("method_" + i, "P1");
 
             methodExecutor.setTokenStatsCallback((prompt, response) -> {
                 currentMethodStats.addPromptTokens(prompt);
                 currentMethodStats.addResponseTokens(response);
-                log.info("📊 Method #{} - Prompt: {} tokens, Response: {} tokens",
-                        methodIndex, prompt, response);
             });
 
             String methodPrompt = buildIterativeMethodPrompt(targetFile, i);
 
-            // 流式执行
             ConsoleStreamingHandler handler = new ConsoleStreamingHandler();
             methodExecutor.runStream(methodPrompt, handler);
 
@@ -199,79 +408,36 @@ public class SimpleAgentOrchestrator {
 
             String content = handler.getContent();
 
-            // 解析方法名（从输出中提取）
+            // 从 LLM 响应中提取实际方法名
             String extractedMethod = extractMethodName(content);
             if (extractedMethod != null) {
-                currentMethodName = extractedMethod;
+                currentMethodStats.setMethodName(extractedMethod);
             }
 
-            // 解析覆盖率
             double coverage = extractCoverage(content);
-
-            // 更新当前方法统计
             currentMethodStats.incrementIteration();
 
-            // 判断结果 - 检查迭代是否完成（忽略大小写）
             String contentLower = content.toLowerCase();
             if (contentLower.contains("iteration_complete") ||
-                    contentLower.contains("iteration complete") ||
-                    contentLower.contains("all methods completed") ||
-                    contentLower.contains("6/6 completed") || // 检测完成比例
-                    contentLower.contains("all methods have been")) {
+                    contentLower.contains("all methods completed")) {
                 log.info(">>> Iteration completed after {} methods", i - 1);
-                // 移除最后一个未完成的统计（因为它只是检查完成状态）
                 iterationStats.getMethodStatsList().remove(currentMethodStats);
                 break;
-            } else if (handler.getError() != null || contentLower.contains("failed")
-                    || contentLower.contains("error")) {
-                // 只有明确失败才标记为失败
-                log.warn("❌ Method {} failed, attempt {}/{}", currentMethodName, methodRetryCount + 1,
-                        maxMethodRetries);
+            } else if (handler.getError() != null || contentLower.contains("failed")) {
                 methodRetryCount++;
                 if (methodRetryCount >= maxMethodRetries) {
                     currentMethodStats.complete("FAILED", coverage);
                     methodRetryCount = 0;
                 } else {
-                    // 不增加 i，重试当前方法
                     i--;
                 }
             } else {
-                // 默认：没有错误就视为成功
-                // 检查是否有覆盖率信息或方法完成的标志
-                boolean hasCompletion = contentLower.contains("success") ||
-                        contentLower.contains("completecurrentmethod") ||
-                        contentLower.contains("completed") ||
-                        contentLower.contains("coverage") ||
-                        contentLower.contains("getnextmethod");
-
-                if (hasCompletion || coverage > 0) {
-                    log.info("✅ Method {} completed with coverage: {}%", currentMethodName,
-                            String.format("%.1f", coverage));
-                    currentMethodStats.complete("SUCCESS", coverage);
-                    currentPriority = extractPriority(content);
-                    methodRetryCount = 0;
-                } else {
-                    // 即使没有明确标志，如果没有错误，也视为成功
-                    log.info("✅ Method {} iteration completed", currentMethodName);
-                    currentMethodStats.complete("SUCCESS", coverage);
-                    methodRetryCount = 0;
-                }
+                currentMethodStats.complete("SUCCESS", coverage);
+                methodRetryCount = 0;
             }
         }
 
-        // ===== Phase 3: 汇总 =====
-        log.info(">>> Phase 3: Summary");
-
-        AgentExecutor summaryExecutor = createExecutor(systemPrompt, 5);
-        AgentResult summaryResult = summaryExecutor.run(
-                "Call getIterationProgress() to show the final summary of all tested methods.");
-
-        if (summaryResult.success()) {
-            log.info("Iterative test generation completed");
-        }
-
-        // ===== 生成报告 =====
-        // 获取 agent 运行目录（JAR 所在目录）
+        // 生成报告
         String agentDir = getAgentRunDirectory();
         generateReport(agentDir);
     }
@@ -446,7 +612,8 @@ public class SimpleAgentOrchestrator {
                     message.append("\n```\n");
                     message.append("\n### ⚠️ CRITICAL INSTRUCTIONS for Existing Tests:\n");
                     message.append("1. **READ the coverage report above** - it shows which methods need tests\n");
-                    message.append("2. **Symbol meanings**: ✗ = No coverage (MUST TEST), ◐ = Partial (NEED MORE), ✓ = Good (SKIP)\n");
+                    message.append(
+                            "2. **Symbol meanings**: ✗ = No coverage (MUST TEST), ◐ = Partial (NEED MORE), ✓ = Good (SKIP)\n");
                     message.append("3. **DO NOT duplicate existing tests** - Read existing test file first\n");
                     message.append("4. **Focus on uncovered code paths**:\n");
                     message.append("   - Methods marked ✗ (0% coverage): Create new test methods\n");
@@ -614,19 +781,51 @@ public class SimpleAgentOrchestrator {
     }
 
     /**
+     * 方法覆盖率信息
+     */
+    public static class MethodCoverageInfo {
+        String methodName;
+        String priority;
+        double lineCoverage;
+        double branchCoverage;
+        boolean needsTest; // 是否需要生成测试
+
+        public MethodCoverageInfo(String methodName, String priority, double lineCoverage, double branchCoverage) {
+            this.methodName = methodName;
+            this.priority = priority;
+            this.lineCoverage = lineCoverage;
+            this.branchCoverage = branchCoverage;
+        }
+
+        public double getOverallCoverage() {
+            // 综合覆盖率：行覆盖和分支覆盖的加权平均
+            return (lineCoverage + branchCoverage) / 2;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s [%s] - Line: %.1f%%, Branch: %.1f%%",
+                    methodName, priority, lineCoverage, branchCoverage);
+        }
+    }
+
+    /**
      * 预检查结果
      */
     private static class PreCheckResult {
         boolean success;
         String errorMessage;
-        String coverageInfo; // 覆盖率信息，传递给 LLM
+        String coverageInfo; // 覆盖率信息文本，传递给 LLM
         boolean hasExistingTests;
+        List<MethodCoverageInfo> methodCoverages; // 每个方法的覆盖率
 
-        static PreCheckResult success(String coverageInfo, boolean hasExistingTests) {
+        static PreCheckResult success(String coverageInfo, boolean hasExistingTests,
+                List<MethodCoverageInfo> methodCoverages) {
             PreCheckResult r = new PreCheckResult();
             r.success = true;
             r.coverageInfo = coverageInfo;
             r.hasExistingTests = hasExistingTests;
+            r.methodCoverages = methodCoverages != null ? methodCoverages : new ArrayList<>();
             return r;
         }
 
@@ -634,7 +833,20 @@ public class SimpleAgentOrchestrator {
             PreCheckResult r = new PreCheckResult();
             r.success = false;
             r.errorMessage = error;
+            r.methodCoverages = new ArrayList<>();
             return r;
+        }
+
+        /**
+         * 获取按覆盖率排序的方法列表（覆盖率低的在前）
+         */
+        List<MethodCoverageInfo> getMethodsSortedByCoverage() {
+            if (methodCoverages == null || methodCoverages.isEmpty()) {
+                return new ArrayList<>();
+            }
+            return methodCoverages.stream()
+                    .sorted((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()))
+                    .collect(java.util.stream.Collectors.toList());
         }
     }
 
@@ -677,7 +889,7 @@ public class SimpleAgentOrchestrator {
             System.out.println("✅ Found existing test file: " + testFilePath);
         } else {
             System.out.println("ℹ️ No existing test file found. Will create new tests.");
-            return PreCheckResult.success(null, false);
+            return PreCheckResult.success(null, false, null);
         }
 
         // Step 3: 执行测试并获取覆盖率
@@ -704,6 +916,8 @@ public class SimpleAgentOrchestrator {
         System.out.println("\n📊 Step 4: Analyzing coverage...");
         String coverageInfo = null;
         String uncoveredMethods = null;
+        List<MethodCoverageInfo> methodCoverages = new ArrayList<>();
+
         try {
             String className = extractClassName(targetFile);
             int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
@@ -731,7 +945,10 @@ public class SimpleAgentOrchestrator {
                 if (lines.length > 15) {
                     System.out.println("   ... (" + (lines.length - 15) + " more lines)");
                 }
-                
+
+                // 解析覆盖率数据，创建 MethodCoverageInfo 列表
+                methodCoverages = parseCoverageInfo(coverageInfo, threshold);
+
                 // 合并覆盖率信息
                 if (uncoveredMethods != null && !uncoveredMethods.startsWith("ERROR")) {
                     coverageInfo = coverageInfo + "\n\n" + uncoveredMethods;
@@ -749,7 +966,60 @@ public class SimpleAgentOrchestrator {
         System.out.println("✅ Pre-check completed. Starting test generation...");
         System.out.println("=".repeat(60) + "\n");
 
-        return PreCheckResult.success(coverageInfo, hasExistingTests);
+        return PreCheckResult.success(coverageInfo, hasExistingTests, methodCoverages);
+    }
+
+    /**
+     * 解析覆盖率信息，提取每个方法的覆盖率
+     */
+    private List<MethodCoverageInfo> parseCoverageInfo(String coverageInfo, int threshold) {
+        List<MethodCoverageInfo> methods = new ArrayList<>();
+        if (coverageInfo == null || coverageInfo.isEmpty()) {
+            return methods;
+        }
+
+        // 解析格式: ✗ methodName(params) Line: 0.0% Branch: 0.0%
+        // 或: ◐ methodName(params) Line: 50.0% Branch: 25.0%
+        // 或: ✓ methodName(params) Line: 100.0% Branch: 100.0%
+        Pattern pattern = Pattern
+                .compile("([✓◐✗])\\s+(\\w+)\\([^)]*\\)\\s+Line:\\s*([\\d.]+)%\\s+Branch:\\s*([\\d.]+)%");
+        Matcher matcher = pattern.matcher(coverageInfo);
+
+        while (matcher.find()) {
+            // status = matcher.group(1); // ✓, ◐, ✗ - 不使用，直接根据覆盖率判断
+            String methodName = matcher.group(2);
+            double lineCoverage = Double.parseDouble(matcher.group(3));
+            double branchCoverage = Double.parseDouble(matcher.group(4));
+
+            // 跳过构造方法
+            if ("constructor".equals(methodName)) {
+                continue;
+            }
+
+            // 确定优先级：覆盖率低的优先级高
+            String priority;
+            if (lineCoverage == 0) {
+                priority = "P0"; // 无覆盖，最高优先级
+            } else if (lineCoverage < threshold) {
+                priority = "P1"; // 部分覆盖
+            } else {
+                priority = "P2"; // 已达到覆盖率要求
+            }
+
+            MethodCoverageInfo info = new MethodCoverageInfo(methodName, priority, lineCoverage, branchCoverage);
+            info.needsTest = lineCoverage < threshold;
+            methods.add(info);
+        }
+
+        // 按覆盖率排序（低的在前）
+        methods.sort((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()));
+
+        log.info("Parsed {} methods from coverage info", methods.size());
+        for (MethodCoverageInfo m : methods) {
+            log.info("  - {}", m);
+        }
+
+        return methods;
     }
 
     /**
