@@ -49,6 +49,7 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 | **LSP Syntax Checking** | Optional Eclipse JDT Language Server integration for semantic analysis (auto-download) |
 | **Pre-compile Validation** | JavaParser-based fast syntax checking before compilation |
 | **Iterative Method Testing** | Generate tests one method at a time with priority-based ordering |
+| **Interactive Mode** | Preview and confirm file writes before applying changes (safety-first workflow) |
 
 ## Installation
 
@@ -253,13 +254,126 @@ java -jar utagent.jar \
 
 ### Interactive Mode
 
-Preview and confirm each file write operation.
+Preview and confirm each file write operation before the agent modifies your codebase. This mode provides an extra layer of safety and control.
+
+#### When to Use Interactive Mode
+
+**✅ Recommended for:**
+- **Production codebases** - Review changes before they're applied
+- **Critical systems** - Ensure test code quality before committing
+- **Learning/Review** - Understand what the agent generates before accepting
+- **First-time usage** - Get familiar with agent behavior
+- **Custom test patterns** - Verify generated tests match your project's style
+
+**❌ Not needed for:**
+- **Development/testing environments** - Automated workflows
+- **CI/CD pipelines** - Non-interactive execution required
+- **Batch processing** - Too many confirmations would slow down
+
+#### Usage
 
 ```bash
+# Enable interactive mode via command line
+java -jar utagent.jar \
+  --target path/to/MyService.java \
+  --interactive
+
+# Or use short form
 java -jar utagent.jar \
   --target path/to/MyService.java \
   -i
+
+# Or configure in agent.yml
+workflow:
+  interactive: true
 ```
+
+#### Interactive Workflow
+
+When interactive mode is enabled, the agent will pause before each file write operation and show you:
+
+1. **File Preview** - First 30 lines of the file to be written
+2. **Operation Type** - CREATE NEW FILE, OVERWRITE EXISTING, or APPEND TO FILE
+3. **File Path** - Exact location where the file will be written
+
+**Example Interactive Prompt:**
+```
+╔══════════════════════════════════════════════════════════════════╗
+║ WRITE FILE: src/test/java/com/example/MyServiceTest.java         ║
+║ Operation: CREATE NEW FILE                                       ║
+╟──────────────────────────────────────────────────────────────────╢
+║ Preview (first 30 lines):                                        ║
+║                                                                  ║
+║ package com.example;                                             ║
+║                                                                  ║
+║ import org.junit.jupiter.api.Test;                               ║
+║ import org.junit.jupiter.api.extension.ExtendWith;               ║
+║ import org.mockito.InjectMocks;                                  ║
+║ import org.mockito.Mock;                                          ║
+║ import org.mockito.junit.jupiter.MockitoExtension;               ║
+║ ...                                                              ║
+╟──────────────────────────────────────────────────────────────────╢
+║ [Y] Confirm  [n] Cancel  [v] View full content                   ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+**Available Actions:**
+- **`Y` or `Enter`** - Confirm and write the file
+- **`n`** - Cancel this write operation (agent will continue with other operations)
+- **`v`** - View the full file content before deciding
+
+#### Use Cases
+
+**1. Review Generated Test Code**
+```bash
+# Generate tests with preview
+java -jar utagent.jar --target MyService.java --interactive
+
+# Review each test file before accepting
+# Agent shows: "About to create MyServiceTest.java"
+# You can: View full content, confirm, or skip
+```
+
+**2. Protect Existing Test Files**
+```bash
+# Agent detects existing test file
+# Shows: "About to OVERWRITE existing MyServiceTest.java"
+# You can: Review changes, confirm, or cancel to preserve existing tests
+```
+
+**3. Incremental Test Generation**
+```bash
+# In iterative mode with interactive enabled
+# Agent generates one method's tests at a time
+# You review and confirm each batch before proceeding
+```
+
+**4. Learning Agent Behavior**
+```bash
+# First time using the agent? Enable interactive mode
+# See exactly what code is generated
+# Understand test patterns and structure
+# Build confidence before running in automated mode
+```
+
+#### Configuration
+
+You can enable interactive mode in three ways:
+
+1. **Command Line Flag** (highest priority)
+   ```bash
+   --interactive  # or -i
+   ```
+
+2. **Configuration File**
+   ```yaml
+   workflow:
+     interactive: true
+   ```
+
+3. **Default Behavior**
+   - Default: `false` (non-interactive)
+   - Set to `true` for safety-first workflows
 
 ### Iterative Method Testing Mode
 
@@ -456,7 +570,13 @@ workflow:
   # Coverage threshold (%) - auto-supplements tests if not reached
   coverageThreshold: 80
   
-  # Interactive mode - confirm before each file write
+  # Interactive mode - preview and confirm before each file write operation
+  # When enabled, agent pauses before writing/modifying files and shows:
+  #   - File preview (first 30 lines)
+  #   - Operation type (CREATE/OVERWRITE/APPEND)
+  #   - File path
+  # Use cases: production codebases, critical systems, learning agent behavior
+  # Default: false (non-interactive, suitable for CI/CD and batch processing)
   interactive: false
   
   # Enable LSP syntax checking (auto-downloads JDT LS 1.50.0)
