@@ -231,7 +231,7 @@ public class SimpleAgentOrchestrator {
                 // 构建针对特定方法的提示词
                 String methodPrompt = buildTargetedMethodPrompt(targetFile, methodInfo, i + 1);
 
-                // 流式执行
+                // 流式执行（带重试）
                 ConsoleStreamingHandler handler = new ConsoleStreamingHandler();
                 methodExecutor.runStream(methodPrompt, handler);
 
@@ -246,6 +246,52 @@ public class SimpleAgentOrchestrator {
                 String content = handler.getContent();
                 currentMethodStats.incrementIteration();
 
+                // 检查是否有错误
+                if (handler.getError() != null) {
+                    Throwable error = handler.getError();
+                    log.error("❌ LLM call failed for method {}: {}", methodInfo.methodName, error.getMessage());
+                    if (error.getCause() != null) {
+                        log.error("   Caused by: {}", error.getCause().getMessage());
+                    }
+                    
+                    methodRetryCount++;
+                    log.warn("⏳ Retrying... attempt {}/{}", methodRetryCount + 1, maxMethodRetries);
+                    
+                    if (methodRetryCount >= maxMethodRetries) {
+                        log.error("❌ Max retries reached for method {}", methodInfo.methodName);
+                        currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
+                        methodCompleted = true;
+                    } else {
+                        // 等待一会再重试
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                    continue;
+                }
+                
+                // 检查响应是否为空
+                if (content == null || content.trim().isEmpty()) {
+                    log.warn("⚠️ Empty response for method {}, attempt {}/{}", 
+                            methodInfo.methodName, methodRetryCount + 1, maxMethodRetries);
+                    methodRetryCount++;
+                    
+                    if (methodRetryCount >= maxMethodRetries) {
+                        log.error("❌ Max retries reached (empty responses) for method {}", methodInfo.methodName);
+                        currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
+                        methodCompleted = true;
+                    } else {
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                    continue;
+                }
+
                 // 解析最终覆盖率
                 double finalCoverage = extractCoverage(content);
                 if (finalCoverage <= 0) {
@@ -254,10 +300,8 @@ public class SimpleAgentOrchestrator {
 
                 // 判断结果
                 String contentLower = content.toLowerCase();
-                if (handler.getError() != null ||
-                        (contentLower.contains("failed") && !contentLower.contains("mutation"))) {
-                    log.warn("❌ Method {} failed, attempt {}/{}",
-                            methodInfo.methodName, methodRetryCount + 1, maxMethodRetries);
+                if (contentLower.contains("failed") && !contentLower.contains("mutation")) {
+                    log.warn("❌ Method {} test generation failed", methodInfo.methodName);
                     methodRetryCount++;
 
                     if (methodRetryCount >= maxMethodRetries) {
@@ -453,22 +497,23 @@ public class SimpleAgentOrchestrator {
         // Token 趋势分析
         long skippedCount = methods.stream().filter(IterationStats.MethodStats::isSkipped).count();
         long processedCount = totalMethods - skippedCount;
-        
+
         if (skippedCount > 0) {
             System.out.printf("⏭️ 跳过方法: %d (覆盖率已达标)%n", skippedCount);
         }
-        
+
         if (processedCount >= 3) {
             // 只统计实际处理的方法（非跳过）
             List<IterationStats.MethodStats> processedMethods = methods.stream()
                     .filter(m -> !m.isSkipped())
                     .collect(java.util.stream.Collectors.toList());
-            
+
             int firstThreeCount = Math.min(3, processedMethods.size());
             int firstThreeSum = processedMethods.subList(0, firstThreeCount).stream()
                     .mapToInt(m -> m.getPromptTokens())
                     .sum();
-            int lastThreeSum = processedMethods.subList(Math.max(0, processedMethods.size() - 3), processedMethods.size()).stream()
+            int lastThreeSum = processedMethods
+                    .subList(Math.max(0, processedMethods.size() - 3), processedMethods.size()).stream()
                     .mapToInt(m -> m.getPromptTokens())
                     .sum();
 

@@ -186,22 +186,37 @@ public class AgentExecutor {
                 
                 // 等待流式完成
                 if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
-                    handler.onError(new RuntimeException("Streaming timeout"));
+                    String timeoutMsg = String.format("Streaming timeout after %dms in iteration #%d", timeoutMs, iteration);
+                    log.error(timeoutMsg);
+                    handler.onError(new RuntimeException(timeoutMsg));
                     return;
                 }
                 
                 // 检查错误
                 if (errorRef.get() != null) {
+                    Throwable error = errorRef.get();
+                    log.error("LLM streaming error in iteration #{}: {}", iteration, error.getMessage());
+                    if (error.getCause() != null) {
+                        log.error("Caused by: {}", error.getCause().getMessage());
+                    }
                     return;
                 }
                 
-                // 记录响应
+                // 检查是否有有效响应
+                String responseContent = fullContent.get();
                 List<ToolCall> toolCalls = toolCallsRef.get();
-                contextManager.addAssistantMessage(fullContent.get(), toolCalls.isEmpty() ? null : toolCalls);
+                if ((responseContent == null || responseContent.trim().isEmpty()) && toolCalls.isEmpty()) {
+                    String emptyMsg = "LLM returned empty response in iteration #" + iteration;
+                    log.warn(emptyMsg);
+                    // 空响应不算错误，但要记录
+                }
+                
+                // 记录响应
+                contextManager.addAssistantMessage(responseContent, toolCalls.isEmpty() ? null : toolCalls);
                 
                 // 检查是否需要工具调用
                 if (toolCalls.isEmpty()) {
-                    handler.onComplete(fullContent.get(), null);
+                    handler.onComplete(responseContent, null);
                     return;
                 }
                 
