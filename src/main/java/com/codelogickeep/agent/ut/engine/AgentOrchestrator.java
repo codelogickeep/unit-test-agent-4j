@@ -205,16 +205,88 @@ public class AgentOrchestrator {
 
     /**
      * 创建 AI Assistant
+     * 迭代模式使用较小的窗口（10），普通模式使用较大窗口（20）
      */
     private UnitTestAssistant createAssistant(String systemPrompt) {
-        int memorySize = 20; // 可配置
-        
+        // 迭代模式使用较小窗口，减少上下文干扰
+        boolean iterativeMode = config.getWorkflow() != null && config.getWorkflow().isIterativeMode();
+        int memorySize = iterativeMode ? 10 : 20;
+        return createAssistant(systemPrompt, memorySize);
+    }
+
+    /**
+     * 创建 AI Assistant（可指定 memory 大小）
+     * @param systemPrompt 系统提示词
+     * @param memorySize ChatMemory 窗口大小
+     */
+    private UnitTestAssistant createAssistant(String systemPrompt, int memorySize) {
         return AiServices.builder(UnitTestAssistant.class)
                 .streamingChatModel(streamingLlm)
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(memorySize))
                 .tools(activeTools)  // 使用当前激活的工具集
                 .systemMessageProvider(chatMemoryId -> systemPrompt)
                 .build();
+    }
+
+    /**
+     * 为迭代模式运行单个方法的测试（独立上下文）
+     * 每次调用都创建新的 assistant，确保上下文隔离
+     * 
+     * @param methodContext 方法上下文信息（由 MethodIteratorTool 提供）
+     * @param testFilePath 测试文件路径
+     * @param projectRoot 项目根目录
+     * @return 执行结果
+     */
+    public OrchestrationResult runSingleMethodTest(String methodContext, String testFilePath, String projectRoot) {
+        log.info("Running isolated test generation for method");
+        
+        // 构建系统提示词
+        String systemPrompt = buildSystemPrompt(projectRoot);
+        
+        // 为单个方法创建新的 assistant（小窗口，确保隔离）
+        UnitTestAssistant assistant = createAssistant(systemPrompt, 10);
+        
+        // 构建简洁的任务消息
+        String userMessage = String.format(
+            "Generate tests for the following method. This is an ISOLATED task - ignore any previous context.\n\n%s\n\nTest file: %s",
+            methodContext, testFilePath
+        );
+        
+        try {
+            TokenStream tokenStream = assistant.generateTest(userMessage);
+            StreamingResponseHandler.StreamingResult streamingResult = streamingHandler.handle(tokenStream);
+            
+            if (!streamingResult.isSuccess()) {
+                return OrchestrationResult.builder()
+                        .success(false)
+                        .errorMessage(streamingResult.getError() != null ? 
+                                streamingResult.getError().getMessage() : "Streaming failed")
+                        .build();
+            }
+            
+            return OrchestrationResult.builder()
+                    .success(true)
+                    .content(streamingResult.getContent())
+                    .tokenCount(streamingResult.getTokenCount())
+                    .durationMs(streamingResult.getDurationMs())
+                    .build();
+        } catch (Exception e) {
+            log.error("Failed to run single method test", e);
+            return OrchestrationResult.builder()
+                    .success(false)
+                    .errorMessage(e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * 清除当前上下文，准备下一个方法的测试
+     * 注意：LangChain4j 的 ChatMemory 是绑定到 Assistant 实例的，
+     * 所以"清除"上下文最有效的方式是创建新的 Assistant
+     */
+    public void clearContextForNextMethod() {
+        log.debug("Context will be cleared on next assistant creation");
+        // 实际的清除在 createAssistant 时自动发生
     }
 
     /**
