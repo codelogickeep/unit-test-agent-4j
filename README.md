@@ -4,18 +4,25 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
-[![Version](https://img.shields.io/badge/Version-2.0.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
-## What's New in v2.0.0
+## What's New in v2.1.0
 
-- 🚀 **Custom Lightweight Agent Framework** - Replaced LangChain4j with a purpose-built framework
-- 🔧 **Better Zhipu AI Support** - Fixed message format issues (1214 error)
-- 📊 **Improved Context Management** - Smart message trimming that maintains valid conversation sequence
-- ⚡ **Reduced Dependencies** - Lighter JAR size (~50% smaller)
-- 🔬 **Coverage Feedback Engine** - Intelligent analysis with boundary detection and improvement suggestions
-- 📈 **Iteration Statistics & Reports** - Detailed Markdown reports with coverage trends and token usage
-- 🔄 **Enhanced Retry Mechanism** - Better error handling with automatic retry on LLM failures
+- 🧪 **Unit Tests for Core Framework** - Added comprehensive tests for ContextManager, ToolRegistry, JsonUtil
+- 💾 **Knowledge Base Index Persistence** - Cache indexes to avoid rebuilding on every startup
+- 🔍 **Change Impact Analysis** - Analyze dependency graph to identify affected tests when code changes
+- 🛑 **Smart Stagnation Detection** - Intelligent stop when coverage stops improving
+- ⚙️ **New Config Options** - `max-stale-iterations`, `min-coverage-gain` for fine-tuned control
+- 📦 **Auto Version Detection** - Build script now automatically fetches the latest release version
+
+### Previous in v2.0.0
+
+- 🚀 Custom Lightweight Agent Framework - Replaced LangChain4j with a purpose-built framework
+- 🔧 Better Zhipu AI Support - Fixed message format issues (1214 error)
+- 📊 Improved Context Management - Smart message trimming that maintains valid conversation sequence
+- ⚡ Reduced Dependencies - Lighter JAR size (~50% smaller)
+- 🔬 Coverage Feedback Engine - Intelligent analysis with boundary detection and improvement suggestions
 
 ## Table of Contents
 

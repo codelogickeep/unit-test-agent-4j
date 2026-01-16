@@ -22,6 +22,8 @@ workflow:
   iterative-mode: false                   # Enable iterative method testing mode
   method-coverage-threshold: 80           # Per-method coverage threshold (%)
   skip-low-priority: false                # Skip low-priority methods (P2) in iterative mode
+  max-stale-iterations: 3                 # Stop after N iterations without progress
+  min-coverage-gain: 1                    # Minimum coverage gain (%) per iteration to continue
 
 # Batch Mode Settings (for --project)
 batch:

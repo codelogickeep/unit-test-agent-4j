@@ -10,7 +10,9 @@ $ErrorActionPreference = "Stop"
 
 # 配置
 $REPO = "codelogickeep/unit-test-agent-4j"
-$VERSION = if ($env:VERSION) { $env:VERSION } else { "v2.0.0" }
+# 如果未指定版本，自动获取最新 release 版本
+# 用户可通过 $env:VERSION = "v2.1.0" 指定特定版本
+$VERSION = if ($env:VERSION) { $env:VERSION } else { $null }
 $INSTALL_DIR = "$env:USERPROFILE\.utagent"
 $BUILD_DIR = "$env:USERPROFILE\.utagent-build"
 
@@ -76,6 +78,40 @@ function Test-Environment {
     Write-Info "✓ $gitVersion"
 }
 
+# 获取最新版本
+function Get-LatestVersion {
+    Write-Info "获取最新版本..."
+    
+    try {
+        # 尝试从 GitHub API 获取最新 release
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest" -ErrorAction SilentlyContinue
+        if ($response.tag_name) {
+            Write-Info "✓ 最新版本: $($response.tag_name)"
+            return $response.tag_name
+        }
+    } catch {
+        Write-Warn "无法从 GitHub API 获取版本信息"
+    }
+    
+    try {
+        # 尝试从 git ls-remote 获取最新 tag
+        $tags = & git ls-remote --tags --sort=-version:refname "https://github.com/$REPO.git" 2>$null
+        if ($tags) {
+            $latestTag = ($tags | Select-Object -First 1) -replace '.*refs/tags/', '' -replace '\^{}', ''
+            if ($latestTag) {
+                Write-Info "✓ 最新版本: $latestTag"
+                return $latestTag
+            }
+        }
+    } catch {
+        Write-Warn "无法从 Git 获取版本信息"
+    }
+    
+    # 如果都失败了，使用 main 分支
+    Write-Warn "无法获取最新版本，使用 main 分支"
+    return "main"
+}
+
 # 克隆源码
 function Invoke-CloneSource {
     Write-Info "克隆源码..."
@@ -85,6 +121,10 @@ function Invoke-CloneSource {
         Remove-Item -Recurse -Force $BUILD_DIR
     }
 
+    # 如果未指定版本，自动获取最新版本
+    $script:VERSION = if ($VERSION) { $VERSION } else { Get-LatestVersion }
+    
+    Write-Info "使用版本: $VERSION"
     & git clone --depth 1 --branch $VERSION "https://github.com/$REPO.git" $BUILD_DIR
     if ($LASTEXITCODE -ne 0) {
         throw "Git clone 失败"

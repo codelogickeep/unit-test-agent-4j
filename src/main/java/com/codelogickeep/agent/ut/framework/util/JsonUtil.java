@@ -202,7 +202,11 @@ public class JsonUtil {
                     Iterator<Map.Entry<String, JsonNode>> fields = argsNode.fields();
                     while (fields.hasNext()) {
                         Map.Entry<String, JsonNode> field = fields.next();
-                        arguments.put(field.getKey(), nodeToValue(field.getValue()));
+                        Object value = nodeToValue(field.getValue());
+                        // 跳过 null 值，因为 ToolCall 使用 Map.copyOf() 不允许 null
+                        if (value != null) {
+                            arguments.put(field.getKey(), value);
+                        }
                     }
                 } catch (JsonProcessingException e) {
                     // 解析失败，保持空 arguments

@@ -79,6 +79,10 @@ public class AppConfig {
         private int methodCoverageThreshold = 80; // 单个方法覆盖率阈值
         @JsonProperty("skip-low-priority")
         private boolean skipLowPriority = false; // 是否跳过低优先级方法 (P2)
+        @JsonProperty("max-stale-iterations")
+        private int maxStaleIterations = 3; // 最大无进展迭代次数
+        @JsonProperty("min-coverage-gain")
+        private int minCoverageGain = 1; // 每次迭代最小覆盖率提升 (%)
     }
 
     @Data

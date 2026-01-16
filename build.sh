@@ -18,7 +18,9 @@ NC='\033[0m'
 
 # 配置
 REPO="codelogickeep/unit-test-agent-4j"
-VERSION="${VERSION:-v2.0.0}"
+# 如果未指定版本，自动获取最新 release 版本
+# 用户可通过 VERSION=v2.1.0 ./build.sh 指定特定版本
+VERSION="${VERSION:-}"
 INSTALL_DIR="$HOME/.utagent"
 BUILD_DIR="$HOME/.utagent-build"
 
@@ -77,6 +79,30 @@ check_environment() {
     echo_info "✓ Git 版本: $(git --version)"
 }
 
+# 获取最新版本
+get_latest_version() {
+    echo_info "获取最新版本..."
+    
+    # 尝试从 GitHub API 获取最新 release
+    local latest
+    latest=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+    
+    if [ -z "$latest" ]; then
+        # 如果获取失败，尝试从 git ls-remote 获取最新 tag
+        latest=$(git ls-remote --tags --sort=-version:refname "https://github.com/$REPO.git" 2>/dev/null | head -n1 | sed 's/.*refs\/tags\///' | sed 's/\^{}//')
+    fi
+    
+    if [ -z "$latest" ]; then
+        # 如果仍然失败，使用默认版本
+        latest="main"
+        echo_warn "无法获取最新版本，使用 main 分支"
+    else
+        echo_info "✓ 最新版本: $latest"
+    fi
+    
+    echo "$latest"
+}
+
 # 克隆源码
 clone_source() {
     echo_info "克隆源码..."
@@ -86,6 +112,12 @@ clone_source() {
         rm -rf "$BUILD_DIR"
     fi
 
+    # 如果未指定版本，自动获取最新版本
+    if [ -z "$VERSION" ]; then
+        VERSION=$(get_latest_version)
+    fi
+
+    echo_info "使用版本: $VERSION"
     git clone --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$BUILD_DIR"
     cd "$BUILD_DIR"
     echo_info "✓ 源码已克隆到: $BUILD_DIR"

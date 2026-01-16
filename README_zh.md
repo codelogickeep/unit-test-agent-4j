@@ -5,17 +5,24 @@
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.0.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 
-## v2.0.0 新特性
+## v2.1.0 新特性
 
-- 🚀 **自研轻量级 Agent 框架** - 替换 LangChain4j，使用专门构建的框架
-- 🔧 **更好的智谱 AI 支持** - 修复消息格式问题（1214 错误）
-- 📊 **改进的上下文管理** - 智能消息裁剪，保持有效对话序列
-- ⚡ **减少依赖** - JAR 包体积减小约 50%
-- 🔬 **覆盖率反馈引擎** - 智能分析，包含边界检测和改进建议
-- 📈 **迭代统计与报告** - 详细的 Markdown 报告，包含覆盖率趋势和 Token 使用统计
-- 🔄 **增强的重试机制** - 更好的错误处理，LLM 失败时自动重试
+- 🧪 **核心框架单元测试** - 为 ContextManager、ToolRegistry、JsonUtil 添加全面测试
+- 💾 **知识库索引持久化** - 缓存索引，避免每次启动重建
+- 🔍 **变更影响范围分析** - 分析依赖图，识别代码变更影响的测试
+- 🛑 **智能停滞检测** - 覆盖率停止增长时智能停止迭代
+- ⚙️ **新配置项** - `max-stale-iterations`、`min-coverage-gain` 提供精细控制
+- 📦 **自动版本检测** - 构建脚本自动获取最新 release 版本
+
+### v2.0.0 特性回顾
+
+- 🚀 自研轻量级 Agent 框架 - 替换 LangChain4j，使用专门构建的框架
+- 🔧 更好的智谱 AI 支持 - 修复消息格式问题（1214 错误）
+- 📊 改进的上下文管理 - 智能消息裁剪，保持有效对话序列
+- ⚡ 减少依赖 - JAR 包体积减小约 50%
+- 🔬 覆盖率反馈引擎 - 智能分析，包含边界检测和改进建议
 
 ## 目录
 

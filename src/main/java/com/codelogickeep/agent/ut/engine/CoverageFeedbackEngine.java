@@ -34,6 +34,21 @@ public class CoverageFeedbackEngine {
 
     private final List<FeedbackIteration> iterationHistory = new ArrayList<>();
     private int currentIteration = 0;
+    
+    // 停滞检测配置
+    private int maxStaleIterations = 3;          // 最大无进展迭代次数
+    private int minCoverageGainPerIteration = 1; // 每次迭代最小覆盖率提升
+    private StopReason lastStopReason = null;
+    
+    /**
+     * 设置停滞检测配置
+     */
+    public void configureStagnationDetection(int maxStaleIterations, int minCoverageGain) {
+        this.maxStaleIterations = Math.max(1, maxStaleIterations);
+        this.minCoverageGainPerIteration = Math.max(0, minCoverageGain);
+        log.info("Stagnation detection configured: maxStaleIterations={}, minCoverageGain={}%", 
+                this.maxStaleIterations, this.minCoverageGainPerIteration);
+    }
 
     /**
      * 执行一轮覆盖率反馈分析
@@ -181,26 +196,128 @@ public class CoverageFeedbackEngine {
      * 检查是否应该继续迭代
      */
     public boolean shouldContinueIterating(int maxIterations) {
+        lastStopReason = null;
+        
+        // 1. 检查最大迭代次数
         if (currentIteration >= maxIterations) {
-            log.info("Reached maximum iterations: {}", maxIterations);
+            lastStopReason = StopReason.MAX_ITERATIONS_REACHED;
+            log.info("Stop reason: Reached maximum iterations ({})", maxIterations);
             return false;
         }
 
-        // 检查是否有进展
-        if (iterationHistory.size() >= 3) {
-            List<FeedbackIteration> lastThree = iterationHistory.subList(
-                    iterationHistory.size() - 3, iterationHistory.size());
+        // 2. 检查目标是否已达成
+        if (!iterationHistory.isEmpty()) {
+            FeedbackIteration lastIteration = iterationHistory.get(iterationHistory.size() - 1);
+            if ("TARGET_MET".equals(lastIteration.getResult())) {
+                lastStopReason = StopReason.TARGET_ACHIEVED;
+                log.info("Stop reason: Coverage target achieved");
+                return false;
+            }
+        }
+
+        // 3. 智能停滞检测
+        if (iterationHistory.size() >= maxStaleIterations) {
+            List<FeedbackIteration> recentIterations = iterationHistory.subList(
+                    iterationHistory.size() - maxStaleIterations, iterationHistory.size());
             
-            boolean noProgress = lastThree.stream()
-                    .allMatch(i -> i.getCoverageAtStart() == lastThree.get(0).getCoverageAtStart());
+            // 检查是否完全没有进展
+            int firstCoverage = recentIterations.get(0).getCoverageAtStart();
+            int lastCoverage = recentIterations.get(recentIterations.size() - 1).getCoverageAtStart();
+            int totalGain = lastCoverage - firstCoverage;
+            int expectedGain = minCoverageGainPerIteration * maxStaleIterations;
             
-            if (noProgress) {
-                log.info("No coverage progress in last 3 iterations, stopping");
+            if (totalGain < expectedGain) {
+                lastStopReason = StopReason.STAGNATION_DETECTED;
+                log.info("Stop reason: Stagnation detected - only {}% gain in last {} iterations (expected at least {}%)",
+                        totalGain, maxStaleIterations, expectedGain);
+                return false;
+            }
+            
+            // 检查覆盖率是否在原地震荡
+            boolean allSameCoverage = recentIterations.stream()
+                    .allMatch(i -> i.getCoverageAtStart() == firstCoverage);
+            if (allSameCoverage) {
+                lastStopReason = StopReason.COVERAGE_PLATEAU;
+                log.info("Stop reason: Coverage plateau at {}% for {} iterations",
+                        firstCoverage, maxStaleIterations);
+                return false;
+            }
+        }
+
+        // 4. 检查是否需要人工审查（连续返回 MANUAL_REVIEW）
+        if (iterationHistory.size() >= 2) {
+            long manualReviewCount = iterationHistory.stream()
+                    .skip(Math.max(0, iterationHistory.size() - 3))
+                    .filter(i -> "MANUAL_REVIEW".equals(i.getResult()))
+                    .count();
+            
+            if (manualReviewCount >= 2) {
+                lastStopReason = StopReason.MANUAL_REVIEW_NEEDED;
+                log.info("Stop reason: Multiple iterations suggest manual review needed");
                 return false;
             }
         }
 
         return true;
+    }
+    
+    /**
+     * 检查是否应该继续迭代（带详细结果）
+     */
+    public ContinuationResult shouldContinueIteratingWithDetails(int maxIterations) {
+        boolean shouldContinue = shouldContinueIterating(maxIterations);
+        
+        return ContinuationResult.builder()
+                .shouldContinue(shouldContinue)
+                .stopReason(lastStopReason)
+                .currentIteration(currentIteration)
+                .maxIterations(maxIterations)
+                .recentProgress(calculateRecentProgress())
+                .recommendation(generateRecommendation())
+                .build();
+    }
+    
+    /**
+     * 计算最近的进展
+     */
+    private int calculateRecentProgress() {
+        if (iterationHistory.size() < 2) {
+            return 0;
+        }
+        int first = iterationHistory.get(0).getCoverageAtStart();
+        int last = iterationHistory.get(iterationHistory.size() - 1).getCoverageAtStart();
+        return last - first;
+    }
+    
+    /**
+     * 根据停止原因生成建议
+     */
+    private String generateRecommendation() {
+        if (lastStopReason == null) {
+            return "Continue iterating to improve coverage.";
+        }
+        
+        switch (lastStopReason) {
+            case TARGET_ACHIEVED:
+                return "Coverage target met. Consider running mutation tests to verify test quality.";
+            case MAX_ITERATIONS_REACHED:
+                return "Maximum iterations reached. Review test strategy or increase iteration limit.";
+            case STAGNATION_DETECTED:
+                return "Coverage stagnation detected. Consider: 1) Refactoring complex code, 2) Adding integration tests, 3) Manual review of hard-to-test code.";
+            case COVERAGE_PLATEAU:
+                return "Coverage plateau reached. Remaining uncovered code may require: 1) Mock injection, 2) Environment-specific tests, 3) Code restructuring.";
+            case MANUAL_REVIEW_NEEDED:
+                return "Automatic test generation has limited further potential. Manual review recommended.";
+            default:
+                return "Unknown state. Please review test generation logs.";
+        }
+    }
+    
+    /**
+     * 获取上次停止原因
+     */
+    public StopReason getLastStopReason() {
+        return lastStopReason;
     }
 
     /**
@@ -353,6 +470,57 @@ public class CoverageFeedbackEngine {
         STRENGTHEN_EXISTING_TESTS,  // 加强现有测试
         ADD_BOUNDARY_TESTS,         // 添加边界测试
         MANUAL_REVIEW               // 需要人工审查
+    }
+    
+    /**
+     * 迭代停止原因
+     */
+    public enum StopReason {
+        TARGET_ACHIEVED("Coverage target achieved"),
+        MAX_ITERATIONS_REACHED("Maximum iterations reached"),
+        STAGNATION_DETECTED("Coverage progress stagnated"),
+        COVERAGE_PLATEAU("Coverage plateau - no change in recent iterations"),
+        MANUAL_REVIEW_NEEDED("Multiple iterations suggest manual review");
+        
+        private final String description;
+        
+        StopReason(String description) {
+            this.description = description;
+        }
+        
+        public String getDescription() {
+            return description;
+        }
+    }
+    
+    /**
+     * 继续迭代决策结果
+     */
+    @Data
+    @Builder
+    public static class ContinuationResult {
+        private boolean shouldContinue;
+        private StopReason stopReason;
+        private int currentIteration;
+        private int maxIterations;
+        private int recentProgress;
+        private String recommendation;
+        
+        public String toSummary() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("=== Iteration Decision ===\n");
+            sb.append(String.format("Should Continue: %s\n", shouldContinue ? "YES" : "NO"));
+            sb.append(String.format("Current Iteration: %d / %d\n", currentIteration, maxIterations));
+            sb.append(String.format("Total Progress: +%d%%\n", recentProgress));
+            
+            if (stopReason != null) {
+                sb.append(String.format("Stop Reason: %s\n", stopReason.getDescription()));
+            }
+            
+            sb.append(String.format("Recommendation: %s\n", recommendation));
+            sb.append("==========================\n");
+            return sb.toString();
+        }
     }
 
     @Data
