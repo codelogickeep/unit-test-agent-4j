@@ -37,7 +37,7 @@ public class SyntaxCheckerTool implements AgentTool {
 
     private String projectRoot;
     private final JavaParser javaParser;
-    
+
     // LSP 委托：当 LSP 启用且正常时，自动使用 LSP 进行检查
     private LspSyntaxCheckerTool lspDelegate;
     private boolean lspEnabled = false;
@@ -49,7 +49,7 @@ public class SyntaxCheckerTool implements AgentTool {
     public void setProjectRoot(String projectRoot) {
         this.projectRoot = projectRoot;
     }
-    
+
     /**
      * 设置 LSP 委托。当 LSP 可用时，checkSyntax 会自动使用 LSP 进行检查。
      */
@@ -64,15 +64,9 @@ public class SyntaxCheckerTool implements AgentTool {
     @Tool("Check Java file syntax before compilation. Returns syntax errors and suggestions if any.")
     public String checkSyntax(
             @P("Path to the Java file to check") String filePath) {
-        
+
         log.info("Tool Input - checkSyntax: path={}", filePath);
-        
-        // 当 LSP 启用且正常时，自动委托给 LSP 进行更完整的语义检查
-        if (lspEnabled && lspDelegate != null) {
-            log.info("Delegating to LSP for syntax check (LSP enabled)");
-            return lspDelegate.checkSyntaxWithLsp(filePath);
-        }
-        
+
         Path path = resolvePath(filePath);
         if (!Files.exists(path)) {
             String result = "ERROR: File not found: " + filePath;
@@ -82,7 +76,31 @@ public class SyntaxCheckerTool implements AgentTool {
 
         try {
             String content = Files.readString(path);
-            return checkSyntaxContentInternal(content, filePath);
+
+            // 始终先执行 JavaParser 检查（包括括号平衡检查）
+            String javaParserResult = checkSyntaxContentInternal(content, filePath);
+
+            // 如果 JavaParser 检查发现错误，直接返回，不进行 LSP 检查
+            if (!javaParserResult.startsWith("SYNTAX_OK")) {
+                log.info("JavaParser found errors, skipping LSP check");
+                return javaParserResult;
+            }
+
+            // JavaParser 通过后，如果启用了 LSP，进行更深入的语义检查
+            if (lspEnabled && lspDelegate != null) {
+                log.info("JavaParser passed, proceeding to LSP for semantic check");
+                String lspResult = lspDelegate.checkSyntaxWithLsp(filePath);
+
+                // 合并结果
+                if (lspResult.startsWith("LSP_OK") || lspResult.startsWith("LSP_WARNINGS")) {
+                    return "SYNTAX_OK (JavaParser + LSP): No errors found in " + filePath;
+                } else {
+                    // LSP 发现错误，返回 LSP 结果
+                    return lspResult;
+                }
+            }
+
+            return javaParserResult;
         } catch (IOException e) {
             String result = "ERROR: Failed to read file: " + e.getMessage();
             log.info("Tool Output - checkSyntax: {}", result);
@@ -94,28 +112,51 @@ public class SyntaxCheckerTool implements AgentTool {
     public String checkSyntaxContent(
             @P("Java source code content to check") String content,
             @P("File name for error reporting") String fileName) {
-        
+
         log.info("Tool Input - checkSyntaxContent: fileName={}, contentLength={}", fileName, content.length());
-        
-        // 当 LSP 启用且正常时，自动委托给 LSP 进行更完整的语义检查
-        if (lspEnabled && lspDelegate != null) {
-            log.info("Delegating to LSP for content syntax check (LSP enabled)");
-            return lspDelegate.checkContentWithLsp(content, fileName);
+
+        // 始终先执行 JavaParser 检查（包括括号平衡检查）
+        String javaParserResult = checkSyntaxContentInternal(content, fileName);
+
+        // 如果 JavaParser 检查发现错误，直接返回，不进行 LSP 检查
+        if (!javaParserResult.startsWith("SYNTAX_OK")) {
+            log.info("JavaParser found errors in content, skipping LSP check");
+            return javaParserResult;
         }
-        
-        return checkSyntaxContentInternal(content, fileName);
+
+        // JavaParser 通过后，如果启用了 LSP，进行更深入的语义检查
+        if (lspEnabled && lspDelegate != null) {
+            log.info("JavaParser passed, proceeding to LSP for semantic check");
+            String lspResult = lspDelegate.checkContentWithLsp(content, fileName);
+
+            // 合并结果
+            if (lspResult.startsWith("LSP_OK") || lspResult.startsWith("LSP_WARNINGS")) {
+                return "SYNTAX_OK (JavaParser + LSP): No errors found in " + fileName;
+            } else {
+                // LSP 发现错误，返回 LSP 结果
+                return lspResult;
+            }
+        }
+
+        return javaParserResult;
     }
-    
+
     /**
      * 内部方法：使用 JavaParser 进行语法检查
      */
     private String checkSyntaxContentInternal(String content, String fileName) {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
-        
+
+        // 0. 预检查：括号平衡检查（快速检测常见错误）
+        String braceError = checkBraceBalance(content);
+        if (braceError != null) {
+            errors.add("[BRACE] " + braceError);
+        }
+
         // 1. JavaParser 语法检查
         ParseResult<CompilationUnit> parseResult = javaParser.parse(content);
-        
+
         if (!parseResult.isSuccessful()) {
             for (Problem problem : parseResult.getProblems()) {
                 String location = problem.getLocation()
@@ -126,14 +167,14 @@ public class SyntaxCheckerTool implements AgentTool {
                 errors.add(String.format("[SYNTAX] %s: %s", location, problem.getMessage()));
             }
         }
-        
+
         // 2. 如果解析成功，进行更深入的检查
         if (parseResult.isSuccessful() && parseResult.getResult().isPresent()) {
             CompilationUnit cu = parseResult.getResult().get();
-            
+
             // 收集所有导入的类型
             Set<String> importedTypes = new HashSet<>();
-            
+
             // 获取所有 imports
             for (ImportDeclaration imp : cu.getImports()) {
                 String importName = imp.getNameAsString();
@@ -142,34 +183,34 @@ public class SyntaxCheckerTool implements AgentTool {
                     importedTypes.add(importName + ".*");
                 } else {
                     // 获取简单类名
-                    String simpleName = importName.contains(".") 
-                            ? importName.substring(importName.lastIndexOf('.') + 1) 
+                    String simpleName = importName.contains(".")
+                            ? importName.substring(importName.lastIndexOf('.') + 1)
                             : importName;
                     importedTypes.add(simpleName);
                 }
             }
-            
+
             // 检查常见的 JUnit/Mockito imports
             checkTestImports(cu, importedTypes, warnings);
-            
+
             // 检查类声明
             cu.findAll(ClassOrInterfaceDeclaration.class).forEach(classDecl -> {
                 // 检查 @Test 注解
                 classDecl.findAll(MethodDeclaration.class).forEach(method -> {
                     boolean hasTestAnnotation = method.getAnnotations().stream()
                             .anyMatch(a -> a.getNameAsString().equals("Test"));
-                    
-                    if (hasTestAnnotation && !importedTypes.contains("Test") 
+
+                    if (hasTestAnnotation && !importedTypes.contains("Test")
                             && !hasWildcardImport(importedTypes, "org.junit.jupiter.api")) {
                         warnings.add("[IMPORT] Missing import for @Test: add 'import org.junit.jupiter.api.Test;'");
                     }
                 });
-                
+
                 // 检查 @Mock 注解
                 classDecl.getFields().forEach(field -> {
                     boolean hasMockAnnotation = field.getAnnotations().stream()
                             .anyMatch(a -> a.getNameAsString().equals("Mock"));
-                    
+
                     if (hasMockAnnotation && !importedTypes.contains("Mock")
                             && !hasWildcardImport(importedTypes, "org.mockito")) {
                         warnings.add("[IMPORT] Missing import for @Mock: add 'import org.mockito.Mock;'");
@@ -177,17 +218,17 @@ public class SyntaxCheckerTool implements AgentTool {
                 });
             });
         }
-        
+
         // 3. 更新编译守卫状态
         if (errors.isEmpty()) {
             CompileGuard.getInstance().markSyntaxPassed(fileName);
         } else {
             CompileGuard.getInstance().markSyntaxFailed(fileName, errors.toString());
         }
-        
+
         // 4. 构建结果
         StringBuilder result = new StringBuilder();
-        
+
         if (errors.isEmpty() && warnings.isEmpty()) {
             result.append("SYNTAX_OK: No syntax errors found in ").append(fileName);
         } else {
@@ -195,13 +236,14 @@ public class SyntaxCheckerTool implements AgentTool {
                 result.append("SYNTAX_ERRORS (").append(errors.size()).append("):\n");
                 errors.forEach(e -> result.append("  ").append(e).append("\n"));
             }
-            
+
             if (!warnings.isEmpty()) {
-                if (!errors.isEmpty()) result.append("\n");
+                if (!errors.isEmpty())
+                    result.append("\n");
                 result.append("WARNINGS (").append(warnings.size()).append("):\n");
                 warnings.forEach(w -> result.append("  ").append(w).append("\n"));
             }
-            
+
             // 添加修复建议
             result.append("\nSUGGESTIONS:\n");
             if (errors.stream().anyMatch(e -> e.contains("';' expected"))) {
@@ -214,9 +256,9 @@ public class SyntaxCheckerTool implements AgentTool {
                 result.append("  - Add missing import statements\n");
             }
         }
-        
+
         String resultStr = result.toString().trim();
-        log.info("Tool Output - checkSyntaxContent: {}", 
+        log.info("Tool Output - checkSyntaxContent: {}",
                 resultStr.length() > 100 ? resultStr.substring(0, 100) + "..." : resultStr);
         return resultStr;
     }
@@ -224,9 +266,9 @@ public class SyntaxCheckerTool implements AgentTool {
     @Tool("Validate test file structure and common patterns")
     public String validateTestStructure(
             @P("Path to the test Java file") String filePath) {
-        
+
         log.info("Tool Input - validateTestStructure: path={}", filePath);
-        
+
         Path path = resolvePath(filePath);
         if (!Files.exists(path)) {
             return "ERROR: File not found: " + filePath;
@@ -235,39 +277,40 @@ public class SyntaxCheckerTool implements AgentTool {
         try {
             String content = Files.readString(path);
             ParseResult<CompilationUnit> parseResult = javaParser.parse(content);
-            
+
             if (!parseResult.isSuccessful()) {
                 return "ERROR: Cannot parse file. Fix syntax errors first using checkSyntax.";
             }
-            
+
             CompilationUnit cu = parseResult.getResult().get();
             List<String> issues = new ArrayList<>();
-            
+
             // 检查测试类结构
             cu.findAll(ClassOrInterfaceDeclaration.class).forEach(classDecl -> {
                 String className = classDecl.getNameAsString();
-                
+
                 // 检查是否有 @ExtendWith(MockitoExtension.class)
                 boolean hasExtendWith = classDecl.getAnnotations().stream()
                         .anyMatch(a -> a.getNameAsString().equals("ExtendWith"));
-                
+
                 if (!hasExtendWith && classDecl.getFields().stream()
                         .anyMatch(f -> f.getAnnotations().stream()
                                 .anyMatch(a -> a.getNameAsString().equals("Mock")))) {
-                    issues.add("[STRUCTURE] Class " + className + " uses @Mock but missing @ExtendWith(MockitoExtension.class)");
+                    issues.add("[STRUCTURE] Class " + className
+                            + " uses @Mock but missing @ExtendWith(MockitoExtension.class)");
                 }
-                
+
                 // 检查测试方法
                 long testMethodCount = classDecl.findAll(MethodDeclaration.class).stream()
                         .filter(m -> m.getAnnotations().stream()
                                 .anyMatch(a -> a.getNameAsString().equals("Test")))
                         .count();
-                
+
                 if (testMethodCount == 0) {
                     issues.add("[STRUCTURE] Class " + className + " has no @Test methods");
                 }
             });
-            
+
             if (issues.isEmpty()) {
                 return "STRUCTURE_OK: Test structure is valid";
             } else {
@@ -275,7 +318,7 @@ public class SyntaxCheckerTool implements AgentTool {
                         .map(i -> "  " + i)
                         .collect(Collectors.joining("\n"));
             }
-            
+
         } catch (IOException e) {
             return "ERROR: Failed to read file: " + e.getMessage();
         }
@@ -284,7 +327,7 @@ public class SyntaxCheckerTool implements AgentTool {
     private void checkTestImports(CompilationUnit cu, Set<String> importedTypes, List<String> warnings) {
         // 检查常见的测试框架 imports
         Set<String> requiredForAnnotations = new HashSet<>();
-        
+
         cu.findAll(ClassOrInterfaceDeclaration.class).forEach(classDecl -> {
             classDecl.getAnnotations().forEach(ann -> {
                 String name = ann.getNameAsString();
@@ -294,7 +337,7 @@ public class SyntaxCheckerTool implements AgentTool {
                     case "Nested" -> requiredForAnnotations.add("org.junit.jupiter.api.Nested");
                 }
             });
-            
+
             classDecl.getFields().forEach(field -> {
                 field.getAnnotations().forEach(ann -> {
                     String name = ann.getNameAsString();
@@ -306,7 +349,7 @@ public class SyntaxCheckerTool implements AgentTool {
                     }
                 });
             });
-            
+
             classDecl.findAll(MethodDeclaration.class).forEach(method -> {
                 method.getAnnotations().forEach(ann -> {
                     String name = ann.getNameAsString();
@@ -320,7 +363,7 @@ public class SyntaxCheckerTool implements AgentTool {
                 });
             });
         });
-        
+
         // 这里不直接报错，因为可能有通配符 import
         // 只记录为 debug 信息
         log.debug("Required annotations detected: {}", requiredForAnnotations);
@@ -328,6 +371,122 @@ public class SyntaxCheckerTool implements AgentTool {
 
     private boolean hasWildcardImport(Set<String> importedTypes, String packagePrefix) {
         return importedTypes.stream().anyMatch(i -> i.startsWith(packagePrefix) && i.endsWith(".*"));
+    }
+
+    /**
+     * 检查括号平衡（{}, (), []）
+     * 这是一个快速预检查，可以捕获 JavaParser 可能漏报的括号不匹配问题
+     * 
+     * @return 错误信息，如果平衡则返回 null
+     */
+    private String checkBraceBalance(String content) {
+        // 移除字符串字面量和注释，避免干扰
+        String cleaned = removeStringsAndComments(content);
+
+        int braceCount = 0; // {}
+        int parenCount = 0; // ()
+        int bracketCount = 0; // []
+
+        int lastOpenBraceLine = -1;
+        int lineNumber = 1;
+
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+
+            if (c == '\n') {
+                lineNumber++;
+            } else if (c == '{') {
+                braceCount++;
+                lastOpenBraceLine = lineNumber;
+            } else if (c == '}') {
+                braceCount--;
+                if (braceCount < 0) {
+                    return "Unexpected '}' at line " + lineNumber + " (no matching '{')";
+                }
+            } else if (c == '(') {
+                parenCount++;
+            } else if (c == ')') {
+                parenCount--;
+                if (parenCount < 0) {
+                    return "Unexpected ')' at line " + lineNumber + " (no matching '(')";
+                }
+            } else if (c == '[') {
+                bracketCount++;
+            } else if (c == ']') {
+                bracketCount--;
+                if (bracketCount < 0) {
+                    return "Unexpected ']' at line " + lineNumber + " (no matching '[')";
+                }
+            }
+        }
+
+        if (braceCount > 0) {
+            return "Missing '}' - " + braceCount + " unclosed brace(s), last '{' around line " + lastOpenBraceLine;
+        }
+        if (parenCount > 0) {
+            return "Missing ')' - " + parenCount + " unclosed parenthesis";
+        }
+        if (bracketCount > 0) {
+            return "Missing ']' - " + bracketCount + " unclosed bracket(s)";
+        }
+
+        return null; // 平衡
+    }
+
+    /**
+     * 移除字符串字面量和注释，用于括号平衡检查
+     */
+    private String removeStringsAndComments(String content) {
+        StringBuilder result = new StringBuilder(content.length());
+        boolean inString = false;
+        boolean inChar = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
+        char prev = 0;
+
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            char next = (i + 1 < content.length()) ? content.charAt(i + 1) : 0;
+
+            if (inLineComment) {
+                if (c == '\n') {
+                    inLineComment = false;
+                    result.append(c); // 保留换行符用于行号计算
+                }
+            } else if (inBlockComment) {
+                if (prev == '*' && c == '/') {
+                    inBlockComment = false;
+                } else if (c == '\n') {
+                    result.append(c); // 保留换行符
+                }
+            } else if (inString) {
+                if (c == '"' && prev != '\\') {
+                    inString = false;
+                }
+            } else if (inChar) {
+                if (c == '\'' && prev != '\\') {
+                    inChar = false;
+                }
+            } else {
+                if (c == '/' && next == '/') {
+                    inLineComment = true;
+                    i++; // 跳过下一个字符
+                } else if (c == '/' && next == '*') {
+                    inBlockComment = true;
+                    i++; // 跳过下一个字符
+                } else if (c == '"') {
+                    inString = true;
+                } else if (c == '\'') {
+                    inChar = true;
+                } else {
+                    result.append(c);
+                }
+            }
+
+            prev = c;
+        }
+
+        return result.toString();
     }
 
     private Path resolvePath(String filePath) {

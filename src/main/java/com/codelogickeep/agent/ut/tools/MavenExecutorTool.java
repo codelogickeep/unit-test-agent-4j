@@ -168,6 +168,14 @@ public class MavenExecutorTool implements AgentTool {
     @Tool("Execute Maven tests for a specific class. Returns exit code and output.")
     public ExecutionResult executeTest(@P("The full name of the test class to execute (e.g., com.example.MyTest)") String testClassName) throws IOException, InterruptedException {
         log.info("Tool Input - executeTest: testClassName={}", testClassName);
+        
+        // 检查编译守卫 - Maven test 会先执行 test-compile
+        CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
+        if (!checkResult.canCompile()) {
+            log.warn("Test blocked by CompileGuard: {}", checkResult.blockReason());
+            return new ExecutionResult(-1, "", checkResult.blockReason());
+        }
+        
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {
@@ -197,6 +205,14 @@ public class MavenExecutorTool implements AgentTool {
     @Tool("Clean and run all tests to generate fresh coverage data. Use this before analyzing coverage.")
     public ExecutionResult cleanAndTest() throws IOException, InterruptedException {
         log.info("Tool Input - cleanAndTest");
+        
+        // 检查编译守卫 - Maven test 会先执行 test-compile
+        CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
+        if (!checkResult.canCompile()) {
+            log.warn("Clean and test blocked by CompileGuard: {}", checkResult.blockReason());
+            return new ExecutionResult(-1, "", checkResult.blockReason());
+        }
+        
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {

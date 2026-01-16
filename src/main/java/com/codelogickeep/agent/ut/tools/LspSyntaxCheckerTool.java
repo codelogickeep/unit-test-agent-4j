@@ -44,6 +44,8 @@ public class LspSyntaxCheckerTool implements AgentTool {
     // 诊断结果缓存
     private final Map<String, List<Diagnostic>> diagnosticsCache = new ConcurrentHashMap<>();
     private volatile CountDownLatch diagnosticsLatch = new CountDownLatch(1);
+    // 诊断接收时间戳，用于判断诊断是否稳定
+    private volatile long lastDiagnosticsTime = 0;
 
     public void setProjectRoot(String projectRoot) {
         this.projectRoot = projectRoot;
@@ -131,18 +133,32 @@ public class LspSyntaxCheckerTool implements AgentTool {
             TextDocumentItem textDocument = new TextDocumentItem(uri, "java", 1, content);
             languageServer.getTextDocumentService().didOpen(new DidOpenTextDocumentParams(textDocument));
             
-            // 2. 等待诊断结果（LSP 会异步推送）
+            // 2. 等待诊断结果（LSP 会异步推送，可能分批发送）
+            // 等待首次诊断
             boolean received = diagnosticsLatch.await(10, TimeUnit.SECONDS);
             
             if (!received) {
-                // 超时，返回缓存的诊断或空结果
-                log.warn("Timeout waiting for diagnostics");
+                log.warn("Timeout waiting for initial diagnostics");
             }
             
-            // 3. 获取诊断结果
+            // 3. 等待诊断稳定（确保所有诊断都已接收）
+            // JDT LS 可能分批发送诊断，等待直到 500ms 内没有新诊断
+            int stableWaitMs = 500;
+            int maxWaitMs = 3000;
+            int waitedMs = 0;
+            while (waitedMs < maxWaitMs) {
+                long timeSinceLastDiag = System.currentTimeMillis() - lastDiagnosticsTime;
+                if (timeSinceLastDiag >= stableWaitMs) {
+                    break; // 诊断已稳定
+                }
+                Thread.sleep(100);
+                waitedMs += 100;
+            }
+            
+            // 4. 获取诊断结果
             List<Diagnostic> diagnostics = diagnosticsCache.getOrDefault(uri, Collections.emptyList());
             
-            // 4. 格式化结果
+            // 5. 格式化结果
             String result = formatDiagnostics(filePath, diagnostics);
             log.info("Tool Output - checkSyntaxWithLsp: {}", 
                     result.length() > 100 ? result.substring(0, 100) + "..." : result);
@@ -405,6 +421,7 @@ public class LspSyntaxCheckerTool implements AgentTool {
             
             log.debug("Received {} diagnostics for {}", diags.size(), uri);
             diagnosticsCache.put(uri, diags);
+            lastDiagnosticsTime = System.currentTimeMillis(); // 记录接收时间
             diagnosticsLatch.countDown();
         }
 
