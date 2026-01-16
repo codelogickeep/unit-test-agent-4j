@@ -465,7 +465,17 @@ public class App implements Callable<Integer> {
                 try {
                     config = mapper.readValue(configFile, AppConfig.class);
                 } catch (IOException e) {
-                    System.err.println("Warning: Failed to parse existing agent.yml, creating new one.");
+                    System.err.println("Warning: Failed to parse existing agent.yml: " + e.getMessage());
+                    System.err.println("Creating new configuration file...");
+                    // 备份旧文件
+                    File backupFile = new File(configFile.getParentFile(), "agent.yml.bak");
+                    try {
+                        java.nio.file.Files.copy(configFile.toPath(), backupFile.toPath(), 
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        System.err.println("Old config backed up to: " + backupFile.getAbsolutePath());
+                    } catch (IOException backupErr) {
+                        // 忽略备份失败
+                    }
                 }
             }
 

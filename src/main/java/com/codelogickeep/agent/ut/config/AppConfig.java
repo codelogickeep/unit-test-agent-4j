@@ -1,11 +1,13 @@
 package com.codelogickeep.agent.ut.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.Map;
 import java.util.List;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class AppConfig {
     private LlmConfig llm;
     private WorkflowConfig workflow;
@@ -17,12 +19,14 @@ public class AppConfig {
     private IncrementalConfig incremental; // New: incremental mode settings
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class BatchConfig {
         private String excludePatterns;
         private boolean dryRun = false;
     }
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class IncrementalConfig {
         /**
          * 增量模式: uncommitted(默认), staged, compare
@@ -47,6 +51,7 @@ public class AppConfig {
     }
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class LlmConfig {
         @JsonProperty("protocol")
         private String protocol;
@@ -65,6 +70,7 @@ public class AppConfig {
     }
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class WorkflowConfig {
         private int maxRetries;
         private int coverageThreshold = 80; // 默认 80% 覆盖率阈值
@@ -85,11 +91,13 @@ public class AppConfig {
     }
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class McpConfig {
         private List<Map<String, Object>> servers;
     }
 
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SkillConfig {
         private String name;
         private String description;
