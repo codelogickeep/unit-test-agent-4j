@@ -1,252 +1,279 @@
 package com.codelogickeep.agent.ut.tools;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for MavenExecutorTool.
- * 
- * Note: These tests focus on the command building logic rather than actual Maven execution,
- * as executing Maven requires a proper Maven installation and project structure.
+ * MavenExecutorTool 单元测试
+ * 重点测试 CompileGuard 集成和基本功能
  */
 @DisplayName("MavenExecutorTool Tests")
 class MavenExecutorToolTest {
 
-    private MavenExecutorTool mavenExecutorTool;
+    private MavenExecutorTool executor;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
-        mavenExecutorTool = new MavenExecutorTool();
+        executor = new MavenExecutorTool();
+        executor.setProjectRoot(tempDir.toString());
+        CompileGuard.getInstance().setEnabled(true);
+        CompileGuard.getInstance().clearAllStatus();
+    }
+
+    @AfterEach
+    void tearDown() {
+        CompileGuard.getInstance().clearAllStatus();
     }
 
     @Nested
-    @DisplayName("ExecutionResult Record Tests")
-    class ExecutionResultTests {
+    @DisplayName("Project Root Configuration")
+    class ProjectRootConfiguration {
 
         @Test
-        @DisplayName("ExecutionResult should hold exit code, stdout, and stderr")
-        void executionResult_shouldHoldAllFields() {
-            // Given
-            int exitCode = 0;
-            String stdOut = "Build successful";
-            String stdErr = "";
-
-            // When
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(exitCode, stdOut, stdErr);
-
-            // Then
-            assertEquals(0, result.exitCode());
-            assertEquals("Build successful", result.stdOut());
-            assertEquals("", result.stdErr());
+        @DisplayName("setProjectRoot should update project root path")
+        void setProjectRoot_shouldUpdatePath() {
+            String newPath = "/custom/path";
+            executor.setProjectRoot(newPath);
+            
+            Path result = executor.getProjectRoot();
+            
+            assertTrue(result.toString().contains("custom"));
         }
 
         @Test
-        @DisplayName("ExecutionResult should handle failure case")
-        void executionResult_shouldHandleFailure() {
-            // Given
-            int exitCode = 1;
-            String stdOut = "";
-            String stdErr = "Compilation failed: cannot find symbol";
-
-            // When
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(exitCode, stdOut, stdErr);
-
-            // Then
-            assertEquals(1, result.exitCode());
-            assertEquals("", result.stdOut());
-            assertEquals("Compilation failed: cannot find symbol", result.stdErr());
-        }
-
-        @Test
-        @DisplayName("ExecutionResult should handle multiline output")
-        void executionResult_shouldHandleMultilineOutput() {
-            // Given
-            String stdOut = "[INFO] Scanning for projects...\n[INFO] Building project 1.0\n[INFO] BUILD SUCCESS";
-
-            // When
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(0, stdOut, "");
-
-            // Then
-            assertTrue(result.stdOut().contains("BUILD SUCCESS"));
-            assertEquals(3, result.stdOut().split("\n").length);
-        }
-
-        @Test
-        @DisplayName("ExecutionResult equality should work correctly")
-        void executionResult_equalityShouldWork() {
-            // Given
-            MavenExecutorTool.ExecutionResult result1 = new MavenExecutorTool.ExecutionResult(0, "out", "err");
-            MavenExecutorTool.ExecutionResult result2 = new MavenExecutorTool.ExecutionResult(0, "out", "err");
-            MavenExecutorTool.ExecutionResult result3 = new MavenExecutorTool.ExecutionResult(1, "out", "err");
-
-            // Then
-            assertEquals(result1, result2);
-            assertNotEquals(result1, result3);
+        @DisplayName("setProjectRoot with null should keep current path")
+        void setProjectRoot_withNull_shouldKeepCurrentPath() {
+            Path originalPath = executor.getProjectRoot();
+            executor.setProjectRoot(null);
+            
+            assertEquals(originalPath, executor.getProjectRoot());
         }
     }
 
     @Nested
-    @DisplayName("Tool Implementation Tests")
-    class ToolImplementationTests {
+    @DisplayName("CompileGuard Integration - compileProject")
+    class CompileGuardIntegrationCompile {
 
         @Test
-        @DisplayName("MavenExecutorTool should implement AgentTool interface")
-        void mavenExecutorTool_shouldImplementAgentTool() {
-            assertTrue(mavenExecutorTool instanceof AgentTool);
+        @DisplayName("compileProject should be blocked when file needs syntax check")
+        void compileProject_shouldBeBlocked_whenFileNeedsSyntaxCheck() throws IOException, InterruptedException {
+            // Mark a file as modified (needs syntax check)
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            assertEquals(-1, result.exitCode());
+            assertTrue(result.stdErr().contains("COMPILE_BLOCKED"));
         }
 
         @Test
-        @DisplayName("compileProject method should be annotated with @Tool")
-        void compileProject_shouldHaveToolAnnotation() throws NoSuchMethodException {
-            var method = MavenExecutorTool.class.getMethod("compileProject");
-            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
+        @DisplayName("compileProject should be blocked when syntax check failed")
+        void compileProject_shouldBeBlocked_whenSyntaxCheckFailed() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markSyntaxFailed("/path/to/Test.java", "Missing semicolon");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            assertEquals(-1, result.exitCode());
+            assertTrue(result.stdErr().contains("COMPILE_BLOCKED"));
+            assertTrue(result.stdErr().contains("Missing semicolon"));
         }
 
         @Test
-        @DisplayName("executeTest method should be annotated with @Tool")
-        void executeTest_shouldHaveToolAnnotation() throws NoSuchMethodException {
-            var method = MavenExecutorTool.class.getMethod("executeTest", String.class);
-            assertTrue(method.isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.Tool.class));
+        @DisplayName("compileProject should proceed when all files passed syntax check")
+        void compileProject_shouldProceed_whenAllFilesPassed() throws IOException, InterruptedException {
+            // Mark file as modified then passed
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/Test.java");
+            
+            // Since this is a temp dir without pom.xml, Maven will fail
+            // But the important thing is it's not blocked by CompileGuard
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            // If result is -1 and stdErr contains COMPILE_BLOCKED, test fails
+            // Otherwise, Maven tried to run (even if it fails due to no pom.xml)
+            if (result.exitCode() == -1) {
+                assertFalse(result.stdErr().contains("COMPILE_BLOCKED"), 
+                    "Should not be blocked by CompileGuard");
+            }
         }
 
         @Test
-        @DisplayName("executeTest method should have @P annotated parameter")
-        void executeTest_shouldHaveParameterAnnotation() throws NoSuchMethodException {
-            var method = MavenExecutorTool.class.getMethod("executeTest", String.class);
-            var params = method.getParameters();
-            assertEquals(1, params.length);
-            assertTrue(params[0].isAnnotationPresent(com.codelogickeep.agent.ut.framework.annotation.P.class));
-        }
-    }
-
-    @Nested
-    @DisplayName("Shell Detection Tests")
-    class ShellDetectionTests {
-
-        @Test
-        @EnabledOnOs(OS.WINDOWS)
-        @DisplayName("On Windows, should detect PowerShell or cmd.exe")
-        void onWindows_shouldDetectShellCorrectly() {
-            // This test verifies the shell detection doesn't throw
-            // The actual shell used depends on the system configuration
-            assertDoesNotThrow(() -> {
-                // Trigger shell detection by creating a new instance
-                MavenExecutorTool tool = new MavenExecutorTool();
-                assertNotNull(tool);
-            });
-        }
-
-        @Test
-        @EnabledOnOs({OS.LINUX, OS.MAC})
-        @DisplayName("On Unix, should use sh")
-        void onUnix_shouldUseSh() {
-            // On Unix systems, the shell should be 'sh'
-            assertDoesNotThrow(() -> {
-                MavenExecutorTool tool = new MavenExecutorTool();
-                assertNotNull(tool);
-            });
-        }
-    }
-
-    @Nested
-    @DisplayName("Command Building Logic Tests")
-    class CommandBuildingTests {
-
-        @Test
-        @DisplayName("Test class name should be properly formatted")
-        void testClassName_shouldBeProperlyFormatted() {
-            // Given
-            String testClassName = "com.example.service.UserServiceTest";
-
-            // When/Then - verify the class name format is valid
-            assertTrue(testClassName.matches("^[a-zA-Z][a-zA-Z0-9.]*[a-zA-Z0-9]$"));
-            assertTrue(testClassName.contains("."));
-            assertTrue(testClassName.endsWith("Test"));
-        }
-
-        @Test
-        @DisplayName("Should handle test class names with various patterns")
-        void shouldHandleVariousTestClassNames() {
-            // Given
-            String[] validNames = {
-                    "com.example.MyTest",
-                    "com.example.service.UserServiceTest",
-                    "com.example.integration.ApiIT",
-                    "MyClassTests"
-            };
-
-            // Then - all should be valid class names
-            for (String name : validNames) {
-                assertFalse(name.contains(" "), "Class name should not contain spaces: " + name);
-                assertFalse(name.startsWith("."), "Class name should not start with dot: " + name);
-                assertFalse(name.endsWith("."), "Class name should not end with dot: " + name);
+        @DisplayName("compileProject should proceed when guard is disabled")
+        void compileProject_shouldProceed_whenGuardDisabled() throws IOException, InterruptedException {
+            CompileGuard.getInstance().setEnabled(false);
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            // Should not be blocked, Maven may fail for other reasons
+            if (result.exitCode() == -1) {
+                assertFalse(result.stdErr().contains("COMPILE_BLOCKED"));
             }
         }
     }
 
     @Nested
-    @DisplayName("Error Handling Tests")
-    class ErrorHandlingTests {
+    @DisplayName("CompileGuard Integration - executeTest")
+    class CompileGuardIntegrationTest {
 
         @Test
-        @DisplayName("ExecutionResult should preserve error messages")
-        void executionResult_shouldPreserveErrorMessages() {
-            // Given
-            String errorMessage = "java.lang.NullPointerException: Cannot invoke method on null object";
-
-            // When
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(1, "", errorMessage);
-
-            // Then
-            assertTrue(result.stdErr().contains("NullPointerException"));
-            assertEquals(1, result.exitCode());
+        @DisplayName("executeTest should be blocked when file needs syntax check")
+        void executeTest_shouldBeBlocked_whenFileNeedsSyntaxCheck() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.executeTest("com.example.Test");
+            
+            assertEquals(-1, result.exitCode());
+            assertTrue(result.stdErr().contains("COMPILE_BLOCKED"));
         }
 
         @Test
-        @DisplayName("ExecutionResult should handle combined output and error")
-        void executionResult_shouldHandleCombinedOutputAndError() {
-            // Given
-            String stdOut = "[INFO] Compiling...\n[ERROR] Compilation failure";
-            String stdErr = "Error: cannot find symbol\n  symbol: class NotFound";
-
-            // When
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(1, stdOut, stdErr);
-
-            // Then
-            assertTrue(result.stdOut().contains("[ERROR]"));
-            assertTrue(result.stdErr().contains("cannot find symbol"));
+        @DisplayName("executeTest should proceed when all files passed")
+        void executeTest_shouldProceed_whenAllFilesPassed() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.executeTest("com.example.Test");
+            
+            if (result.exitCode() == -1) {
+                assertFalse(result.stdErr().contains("COMPILE_BLOCKED"));
+            }
         }
     }
 
     @Nested
-    @DisplayName("Exit Code Interpretation Tests")
-    class ExitCodeTests {
+    @DisplayName("CompileGuard Integration - cleanAndTest")
+    class CompileGuardIntegrationCleanAndTest {
 
         @Test
-        @DisplayName("Exit code 0 indicates success")
-        void exitCode0_indicatesSuccess() {
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(0, "SUCCESS", "");
+        @DisplayName("cleanAndTest should be blocked when file needs syntax check")
+        void cleanAndTest_shouldBeBlocked_whenFileNeedsSyntaxCheck() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.cleanAndTest();
+            
+            assertEquals(-1, result.exitCode());
+            assertTrue(result.stdErr().contains("COMPILE_BLOCKED"));
+        }
+
+        @Test
+        @DisplayName("cleanAndTest should proceed when guard is disabled")
+        void cleanAndTest_shouldProceed_whenGuardDisabled() throws IOException, InterruptedException {
+            CompileGuard.getInstance().setEnabled(false);
+            CompileGuard.getInstance().markSyntaxFailed("/path/to/Test.java", "Error");
+            
+            MavenExecutorTool.ExecutionResult result = executor.cleanAndTest();
+            
+            if (result.exitCode() == -1) {
+                assertFalse(result.stdErr().contains("COMPILE_BLOCKED"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("ExecutionResult Record")
+    class ExecutionResultTest {
+
+        @Test
+        @DisplayName("ExecutionResult should store all fields correctly")
+        void executionResult_shouldStoreAllFields() {
+            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(
+                0, "stdout content", "stderr content"
+            );
+            
             assertEquals(0, result.exitCode());
+            assertEquals("stdout content", result.stdOut());
+            assertEquals("stderr content", result.stdErr());
         }
 
         @Test
-        @DisplayName("Exit code 1 indicates general failure")
-        void exitCode1_indicatesGeneralFailure() {
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(1, "", "BUILD FAILURE");
+        @DisplayName("ExecutionResult should handle empty strings")
+        void executionResult_shouldHandleEmptyStrings() {
+            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(
+                1, "", ""
+            );
+            
             assertEquals(1, result.exitCode());
+            assertEquals("", result.stdOut());
+            assertEquals("", result.stdErr());
+        }
+    }
+
+    @Nested
+    @DisplayName("Multiple Files Scenario")
+    class MultipleFilesScenario {
+
+        @Test
+        @DisplayName("should block when any file fails syntax check")
+        void shouldBlock_whenAnyFileFails() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/File1.java");
+            CompileGuard.getInstance().markFileModified("/path/to/File2.java");
+            CompileGuard.getInstance().markFileModified("/path/to/File3.java");
+            
+            // Only pass two files
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/File1.java");
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/File2.java");
+            // File3 still pending
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            assertEquals(-1, result.exitCode());
+            assertTrue(result.stdErr().contains("COMPILE_BLOCKED"));
+            assertTrue(result.stdErr().contains("File3.java"));
         }
 
         @Test
-        @DisplayName("Exit code 130 indicates user interrupt (Ctrl+C)")
-        void exitCode130_indicatesInterrupt() {
-            MavenExecutorTool.ExecutionResult result = new MavenExecutorTool.ExecutionResult(130, "", "Interrupted");
-            assertEquals(130, result.exitCode());
+        @DisplayName("should proceed when all files pass syntax check")
+        void shouldProceed_whenAllFilesPass() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/File1.java");
+            CompileGuard.getInstance().markFileModified("/path/to/File2.java");
+            
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/File1.java");
+            CompileGuard.getInstance().markSyntaxPassed("/path/to/File2.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            // Should not be blocked by CompileGuard
+            if (result.exitCode() == -1) {
+                assertFalse(result.stdErr().contains("COMPILE_BLOCKED"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Error Message Quality")
+    class ErrorMessageQuality {
+
+        @Test
+        @DisplayName("blocked message should contain clear instructions")
+        void blockedMessage_shouldContainClearInstructions() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markFileModified("/path/to/Test.java");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            String errorMsg = result.stdErr();
+            assertTrue(errorMsg.contains("checkSyntax"), "Should mention checkSyntax");
+            assertTrue(errorMsg.contains("REQUIRED ACTION") || errorMsg.contains("ACTION"), 
+                "Should have action guidance");
+        }
+
+        @Test
+        @DisplayName("blocked message should list affected files")
+        void blockedMessage_shouldListAffectedFiles() throws IOException, InterruptedException {
+            CompileGuard.getInstance().markSyntaxFailed("/path/to/FailedFile.java", "Syntax error");
+            
+            MavenExecutorTool.ExecutionResult result = executor.compileProject();
+            
+            assertTrue(result.stdErr().contains("FailedFile.java"));
         }
     }
 }
