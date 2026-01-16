@@ -505,10 +505,35 @@ public class SimpleAgentOrchestrator {
             double coverage = extractCoverage(content);
             currentMethodStats.incrementIteration();
 
+            // 主动查询实际覆盖率
+            double actualCoverage = getActualMethodCoverage(projectRoot, targetFile, currentMethodStats.getMethodName());
+            if (actualCoverage > 0) {
+                coverage = actualCoverage;
+                log.info("📊 Actual coverage verified for {}: {}%", currentMethodStats.getMethodName(), coverage);
+            }
+            
+            // 检查覆盖率是否达标
+            int coverageThreshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
+            boolean coverageMet = actualCoverage >= coverageThreshold;
+
             String contentLower = content.toLowerCase();
-            if (contentLower.contains("iteration_complete") ||
-                    contentLower.contains("all methods completed")) {
-                log.info(">>> Iteration completed after {} methods", i - 1);
+            // 增强的终止检测逻辑，防止死循环
+            boolean isComplete = contentLower.contains("iteration_complete") ||
+                    contentLower.contains("iteration complete") ||
+                    contentLower.contains("all methods completed") ||
+                    contentLower.contains("all methods tested") ||
+                    // 匹配 "The iterative testing process has been completed successfully"
+                    (contentLower.contains("completed") && contentLower.contains("successfully") && contentLower.contains("iterative"));
+
+            // 如果覆盖率达标，也认为任务完成
+            if (coverageMet) {
+                log.info(">>> Coverage target met ({}% >= {}%) for {}, marking as complete", 
+                        actualCoverage, coverageThreshold, currentMethodStats.getMethodName());
+                isComplete = true;
+            }
+
+            if (isComplete) {
+                log.info(">>> Iteration completed after {} methods (Termination signal detected)", i - 1);
                 iterationStats.getMethodStatsList().remove(currentMethodStats);
                 break;
             } else if (handler.getError() != null || contentLower.contains("failed")) {
