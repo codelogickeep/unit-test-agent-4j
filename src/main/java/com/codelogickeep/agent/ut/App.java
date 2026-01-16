@@ -444,7 +444,7 @@ public class App implements Callable<Integer> {
         @Option(names = { "--base-url" }, description = "Set the LLM Base URL (e.g., https://api.openai.com/v1).")
         private String baseUrl;
 
-        @Option(names = { "--model" }, description = "Set the LLM Model Name (e.g., gpt-4, gemini-pro).")
+        @Option(names = { "--model-name" }, description = "Set the LLM Model Name (e.g., gpt-4, gemini-pro).")
         private String modelName;
 
         @Option(names = { "--temperature" }, description = "Set the LLM sampling temperature (0.0 to 1.0).")

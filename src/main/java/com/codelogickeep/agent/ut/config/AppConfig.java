@@ -23,7 +23,7 @@ public class AppConfig {
     public static class BatchConfig {
         @JsonProperty("exclude-patterns")
         private String excludePatterns;
-        
+
         @JsonProperty("dry-run")
         private boolean dryRun = false;
     }
@@ -69,17 +69,17 @@ public class AppConfig {
 
         @JsonProperty("api-key")
         private String apiKey;
-        
+
         @JsonProperty("model-name")
         private String modelName;
-        
+
         private Double temperature;
-        
+
         @JsonProperty("base-url")
         private String baseUrl;
-        
+
         private Long timeout; // in seconds
-        
+
         @JsonProperty("custom-headers")
         private Map<String, String> customHeaders;
     }
