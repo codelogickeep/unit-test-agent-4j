@@ -18,6 +18,7 @@ test-governance.yml
 cp.txt
 .claude/
 .cursor/
+.trae/
 
 # Maven
 dependency-reduced-pom.xml
