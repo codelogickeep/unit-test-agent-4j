@@ -143,8 +143,9 @@ public class LspSyntaxCheckerTool implements AgentTool {
             
             // 3. 等待诊断稳定（确保所有诊断都已接收）
             // JDT LS 可能分批发送诊断，等待直到 500ms 内没有新诊断
+            // 对于新文件或首次检查，需要更长时间让 LSP 完成项目索引
             int stableWaitMs = 500;
-            int maxWaitMs = 3000;
+            int maxWaitMs = 5000; // 增加到 5 秒，给 LSP 更多时间索引项目
             int waitedMs = 0;
             while (waitedMs < maxWaitMs) {
                 long timeSinceLastDiag = System.currentTimeMillis() - lastDiagnosticsTime;
@@ -153,6 +154,14 @@ public class LspSyntaxCheckerTool implements AgentTool {
                 }
                 Thread.sleep(100);
                 waitedMs += 100;
+            }
+            
+            // 如果等待时间较长，可能 LSP 还在索引，再等待一次
+            if (waitedMs >= maxWaitMs - 100) {
+                log.debug("LSP may still be indexing, waiting additional 1s...");
+                Thread.sleep(1000);
+                // 重新获取诊断（可能有新的）
+                diagnostics = diagnosticsCache.getOrDefault(uri, Collections.emptyList());
             }
             
             // 4. 获取诊断结果
@@ -376,7 +385,19 @@ public class LspSyntaxCheckerTool implements AgentTool {
         
         // 添加修复建议
         sb.append("\nSUGGESTIONS:\n");
-        if (errors.stream().anyMatch(d -> d.getMessage().contains("cannot be resolved"))) {
+        boolean hasDependencyError = errors.stream().anyMatch(d -> 
+            d.getMessage().contains("cannot be resolved") || 
+            d.getMessage().contains("程序包") ||
+            d.getMessage().contains("找不到符号"));
+        
+        if (hasDependencyError) {
+            sb.append("  ⚠️ DEPENDENCY ISSUE DETECTED:\n");
+            sb.append("     - Check if required dependencies are in pom.xml\n");
+            sb.append("     - For JUnit: <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId></dependency>\n");
+            sb.append("     - For Mockito: <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId></dependency>\n");
+            sb.append("     - Run 'mvn dependency:resolve' to download dependencies\n");
+        }
+        if (errors.stream().anyMatch(d -> d.getMessage().contains("cannot be resolved") && !hasDependencyError)) {
             sb.append("  - Add missing import statements\n");
         }
         if (errors.stream().anyMatch(d -> d.getMessage().contains("type mismatch"))) {

@@ -219,28 +219,36 @@ public class SyntaxCheckerTool implements AgentTool {
             });
         }
 
-        // 3. 更新编译守卫状态
+        // 3. 检查依赖（如果文件包含测试相关的 import）
+        if (parseResult.isSuccessful() && parseResult.getResult().isPresent()) {
+            CompilationUnit cu = parseResult.getResult().get();
+            checkDependencies(cu, fileName, errors, warnings);
+        }
+        
+        // 4. 更新编译守卫状态
         if (errors.isEmpty()) {
             CompileGuard.getInstance().markSyntaxPassed(fileName);
         } else {
             CompileGuard.getInstance().markSyntaxFailed(fileName, errors.toString());
         }
-
-        // 4. 构建结果
+        
+        // 5. 构建结果
         StringBuilder result = new StringBuilder();
-
-        if (errors.isEmpty() && warnings.isEmpty()) {
+        
+        if (errors.isEmpty()) {
+            // 没有错误，返回 SYNTAX_OK（即使有警告）
             result.append("SYNTAX_OK: No syntax errors found in ").append(fileName);
-        } else {
-            if (!errors.isEmpty()) {
-                result.append("SYNTAX_ERRORS (").append(errors.size()).append("):\n");
-                errors.forEach(e -> result.append("  ").append(e).append("\n"));
+            if (!warnings.isEmpty()) {
+                result.append("\n\nWARNINGS (").append(warnings.size()).append("):\n");
+                warnings.forEach(w -> result.append("  ").append(w).append("\n"));
             }
+        } else {
+            // 有错误
+            result.append("SYNTAX_ERRORS (").append(errors.size()).append("):\n");
+            errors.forEach(e -> result.append("  ").append(e).append("\n"));
 
             if (!warnings.isEmpty()) {
-                if (!errors.isEmpty())
-                    result.append("\n");
-                result.append("WARNINGS (").append(warnings.size()).append("):\n");
+                result.append("\nWARNINGS (").append(warnings.size()).append("):\n");
                 warnings.forEach(w -> result.append("  ").append(w).append("\n"));
             }
 
@@ -487,6 +495,95 @@ public class SyntaxCheckerTool implements AgentTool {
         }
 
         return result.toString();
+    }
+
+    /**
+     * 检查依赖是否在 pom.xml 中配置
+     */
+    private void checkDependencies(CompilationUnit cu, String fileName, List<String> errors, List<String> warnings) {
+        // 收集所有 import 语句
+        Set<String> imports = new HashSet<>();
+        cu.getImports().forEach(imp -> imports.add(imp.getNameAsString()));
+        
+        // 检查是否使用了测试框架
+        boolean usesJUnit = imports.stream().anyMatch(imp -> 
+            imp.startsWith("org.junit.jupiter") || imp.startsWith("org.junit."));
+        boolean usesMockito = imports.stream().anyMatch(imp -> 
+            imp.startsWith("org.mockito"));
+        
+        if (!usesJUnit && !usesMockito) {
+            return; // 不是测试文件，不需要检查依赖
+        }
+        
+        // 查找 pom.xml
+        Path pomPath = findPomXml(fileName);
+        if (pomPath == null || !Files.exists(pomPath)) {
+            if (usesJUnit || usesMockito) {
+                // 找不到 pom.xml 时只警告，不报错（可能是测试环境或非 Maven 项目）
+                warnings.add("[DEPENDENCY] Cannot find pom.xml to verify dependencies. " +
+                    "Please ensure junit-jupiter and mockito dependencies are configured in your build file.");
+            }
+            return;
+        }
+        
+        try {
+            String pomContent = Files.readString(pomPath);
+            
+            // 检查 JUnit 依赖
+            if (usesJUnit) {
+                boolean hasJUnit = pomContent.contains("junit-jupiter") || 
+                                  pomContent.contains("junit-jupiter-api") ||
+                                  (pomContent.contains("junit") && pomContent.contains("jupiter"));
+                if (!hasJUnit) {
+                    // 依赖缺失时报告为警告，而不是错误（因为 LSP 会检测到编译错误）
+                    warnings.add("[DEPENDENCY] Missing JUnit dependency in pom.xml. " +
+                        "Add: <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId></dependency>");
+                }
+            }
+            
+            // 检查 Mockito 依赖
+            if (usesMockito) {
+                boolean hasMockito = pomContent.contains("mockito-core") || 
+                                     pomContent.contains("mockito-junit-jupiter");
+                if (!hasMockito) {
+                    // 依赖缺失时报告为警告，而不是错误（因为 LSP 会检测到编译错误）
+                    warnings.add("[DEPENDENCY] Missing Mockito dependency in pom.xml. " +
+                        "Add: <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId></dependency>");
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Failed to read pom.xml for dependency check: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 查找 pom.xml 文件（从文件路径向上查找）
+     */
+    private Path findPomXml(String filePath) {
+        Path path = resolvePath(filePath);
+        Path current = path.getParent();
+        
+        // 向上查找最多 10 层
+        int maxDepth = 10;
+        int depth = 0;
+        while (current != null && depth < maxDepth) {
+            Path pomPath = current.resolve("pom.xml");
+            if (Files.exists(pomPath)) {
+                return pomPath;
+            }
+            current = current.getParent();
+            depth++;
+        }
+        
+        // 如果 projectRoot 已设置，也在那里查找
+        if (projectRoot != null) {
+            Path rootPom = Paths.get(projectRoot, "pom.xml");
+            if (Files.exists(rootPom)) {
+                return rootPom;
+            }
+        }
+        
+        return null;
     }
 
     private Path resolvePath(String filePath) {
