@@ -27,3 +27,6 @@ dependency-reduced-pom.xml
 
 .jdt-lsp/
 jdt-lsp/
+
+# Internal documentation (confidential)
+doc/
