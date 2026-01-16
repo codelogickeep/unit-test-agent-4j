@@ -79,10 +79,8 @@ check_environment() {
     echo_info "✓ Git 版本: $(git --version)"
 }
 
-# 获取最新版本
+# 获取最新版本（仅输出版本号到 stdout，日志走 stderr）
 get_latest_version() {
-    echo_info "获取最新版本..."
-    
     # 尝试从 GitHub API 获取最新 release
     local latest
     latest=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -95,9 +93,6 @@ get_latest_version() {
     if [ -z "$latest" ]; then
         # 如果仍然失败，使用默认版本
         latest="main"
-        echo_warn "无法获取最新版本，使用 main 分支"
-    else
-        echo_info "✓ 最新版本: $latest"
     fi
     
     echo "$latest"
@@ -114,7 +109,13 @@ clone_source() {
 
     # 如果未指定版本，自动获取最新版本
     if [ -z "$VERSION" ]; then
+        echo_info "获取最新版本..."
         VERSION=$(get_latest_version)
+        if [ "$VERSION" = "main" ]; then
+            echo_warn "无法获取最新 release，使用 main 分支"
+        else
+            echo_info "✓ 最新版本: $VERSION"
+        fi
     fi
 
     echo_info "使用版本: $VERSION"

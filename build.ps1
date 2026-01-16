@@ -78,20 +78,15 @@ function Test-Environment {
     Write-Info "✓ $gitVersion"
 }
 
-# 获取最新版本
+# 获取最新版本（静默获取，仅返回版本号）
 function Get-LatestVersion {
-    Write-Info "获取最新版本..."
-    
     try {
         # 尝试从 GitHub API 获取最新 release
         $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest" -ErrorAction SilentlyContinue
         if ($response.tag_name) {
-            Write-Info "✓ 最新版本: $($response.tag_name)"
             return $response.tag_name
         }
-    } catch {
-        Write-Warn "无法从 GitHub API 获取版本信息"
-    }
+    } catch { }
     
     try {
         # 尝试从 git ls-remote 获取最新 tag
@@ -99,16 +94,12 @@ function Get-LatestVersion {
         if ($tags) {
             $latestTag = ($tags | Select-Object -First 1) -replace '.*refs/tags/', '' -replace '\^{}', ''
             if ($latestTag) {
-                Write-Info "✓ 最新版本: $latestTag"
                 return $latestTag
             }
         }
-    } catch {
-        Write-Warn "无法从 Git 获取版本信息"
-    }
+    } catch { }
     
     # 如果都失败了，使用 main 分支
-    Write-Warn "无法获取最新版本，使用 main 分支"
     return "main"
 }
 
@@ -122,7 +113,15 @@ function Invoke-CloneSource {
     }
 
     # 如果未指定版本，自动获取最新版本
-    $script:VERSION = if ($VERSION) { $VERSION } else { Get-LatestVersion }
+    if (-not $VERSION) {
+        Write-Info "获取最新版本..."
+        $script:VERSION = Get-LatestVersion
+        if ($VERSION -eq "main") {
+            Write-Warn "无法获取最新 release，使用 main 分支"
+        } else {
+            Write-Info "✓ 最新版本: $VERSION"
+        }
+    }
     
     Write-Info "使用版本: $VERSION"
     & git clone --depth 1 --branch $VERSION "https://github.com/$REPO.git" $BUILD_DIR
