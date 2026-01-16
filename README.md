@@ -420,37 +420,18 @@ workflow:
 | P1 (Standard) | Complexity 3-4, public/protected | `setConfig()`, `loadData()` |
 | P2 (Low) | Getters, setters, simple constructors | `getId()`, `setName()` |
 
-### Skill-based Tool Selection
+### Workflow Phases (Internal)
 
-Reduce token usage by loading only relevant tools for specific tasks.
+The complete test generation workflow uses different tool sets for each phase. The LLM automatically selects appropriate tools based on the current task:
 
-```bash
-# Use analysis skill (6 tools instead of 15)
-java -jar utagent.jar \
-  --target path/to/MyService.java \
-  --skill analysis
+| Phase | Description | Key Tools |
+|-------|-------------|-----------|
+| **Analysis** | Read and understand source code | CodeAnalyzerTool, FileSystemTool |
+| **Generation** | Generate test files | FileSystemTool, KnowledgeBaseTool, SyntaxCheckerTool |
+| **Verification** | Compile, run tests, check coverage | MavenExecutorTool, CoverageTool |
+| **Repair** | Fix failing tests | FileSystemTool, SyntaxCheckerTool |
 
-# Use generation skill for test writing
-java -jar utagent.jar \
-  --target path/to/MyService.java \
-  --skill generation
-
-# Use verification skill for running tests
-java -jar utagent.jar \
-  --target path/to/MyService.java \
-  --skill verification
-```
-
-**Built-in Skills:**
-
-| Skill | Description | Tools | Token Savings |
-|-------|-------------|-------|---------------|
-| `analysis` | Code analysis phase | 6 | ~60% |
-| `generation` | Test generation phase | 5 | ~65% |
-| `verification` | Test verification phase | 5 | ~65% |
-| `repair` | Fix failing tests | 5 | ~65% |
-| `iterative` | Per-method test generation | 9 | ~40% |
-| `full` | All tools (default) | 16 | baseline |
+All tools are loaded at startup; the LLM decides which to use at each step.
 
 **Interactive Prompts:**
 ```
@@ -519,12 +500,6 @@ java -jar utagent.jar \
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--interactive` | `-i` | Enable interactive confirmation mode |
-
-### Skill Options (Dynamic Tool Selection)
-
-| Option | Description | Example |
-|--------|-------------|---------|
-| `--skill` | Use specific skill's tool subset | `analysis`, `generation`, `verification` |
 
 ## Configuration
 

@@ -401,36 +401,18 @@ utagent --target MyService.java --interactive
    - 默认值：`false`（非交互式）
    - 设置为 `true` 用于安全优先的工作流
 
-### Skill 动态工具选择
+### 工作流程阶段（内部）
 
-通过仅加载相关工具来减少 Token 消耗（约 60-70%）。
+完整的单测生成流程包含多个阶段，LLM 根据当前任务自动选择合适的工具：
 
-```bash
-# 使用 analysis skill（6 个工具，而非 15 个）
-utagent \
-  --target path/to/MyService.java \
-  --skill analysis
+| 阶段 | 说明 | 关键工具 |
+|------|------|----------|
+| **分析** | 读取并理解源代码 | CodeAnalyzerTool, FileSystemTool |
+| **生成** | 生成测试文件 | FileSystemTool, KnowledgeBaseTool, SyntaxCheckerTool |
+| **验证** | 编译、运行测试、检查覆盖率 | MavenExecutorTool, CoverageTool |
+| **修复** | 修复失败的测试 | FileSystemTool, SyntaxCheckerTool |
 
-# 使用 generation skill 生成测试
-utagent \
-  --target path/to/MyService.java \
-  --skill generation
-
-# 使用 verification skill 运行测试
-utagent \
-  --target path/to/MyService.java \
-  --skill verification
-```
-
-**内置 Skills:**
-
-| Skill | 说明 | 工具数 | Token 节省 |
-|-------|------|--------|------------|
-| `analysis` | 代码分析阶段 | 6 | ~60% |
-| `generation` | 测试生成阶段 | 5 | ~65% |
-| `verification` | 测试验证阶段 | 5 | ~65% |
-| `repair` | 修复失败测试 | 5 | ~65% |
-| `full` | 全部工具（默认） | 15 | 基准 |
+所有工具在启动时加载，LLM 在每个步骤自动决定使用哪些工具。
 
 **交互提示示例：**
 ```
@@ -499,12 +481,6 @@ utagent \
 | 选项 | 简写 | 说明 |
 |------|------|------|
 | `--interactive` | `-i` | 启用交互确认模式 |
-
-### Skill 选项（动态工具选择）
-
-| 选项 | 说明 | 示例 |
-|------|------|------|
-| `--skill` | 使用指定 skill 的工具子集 | `analysis`、`generation`、`verification` |
 
 ## 配置说明
 

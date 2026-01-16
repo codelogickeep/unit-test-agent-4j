@@ -91,9 +91,9 @@ public class App implements Callable<Integer> {
             "--threshold" }, description = "Coverage threshold (0-100). Methods below this threshold will be targeted. Default: 80.")
     private Integer coverageThreshold;
 
-    @Option(names = {
-            "--skill" }, description = "Use specific skill for tool selection (e.g., analysis, generation, verification). Default: use all tools.")
-    private String skillName;
+    // Skill 参数已移除：完整的单测生成流程需要所有阶段的工具
+    // 分析(analysis) → 生成(generation) → 验证(verification) → 修复(repair)
+    // Skills 配置现在仅作为内部文档参考，不再支持命令行指定
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -182,12 +182,8 @@ public class App implements Callable<Integer> {
 
         try {
             // 3. Initialize Tools Dynamically
-            // 确定要使用的 skill（CLI 优先，然后是配置文件）
-            String activeSkill = skillName;
-            if (activeSkill == null && config.getWorkflow() != null) {
-                activeSkill = config.getWorkflow().getDefaultSkill();
-            }
-            List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath, activeSkill);
+            // 始终加载所有工具（完整单测流程需要：分析→生成→验证→修复）
+            List<Object> tools = ToolFactory.loadAndWrapTools(config, knowledgeBasePath);
 
             // Detect Project Root (Directory containing pom.xml near target file)
             // If --project is specified, use it as the project root

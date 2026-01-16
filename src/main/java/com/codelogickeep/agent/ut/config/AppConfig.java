@@ -71,8 +71,7 @@ public class AppConfig {
         private boolean interactive = false; // 交互式确认模式
         @JsonProperty("use-lsp")
         private boolean useLsp = false; // 是否使用 LSP 进行语法检查（默认使用 JavaParser）
-        @JsonProperty("default-skill")
-        private String defaultSkill; // 默认使用的 skill 名称，null 表示使用全部工具
+        // default-skill 已移除：完整单测流程需要所有阶段的工具
         @JsonProperty("iterative-mode")
         private boolean iterativeMode = false; // 是否启用逐函数迭代模式
         @JsonProperty("method-coverage-threshold")
