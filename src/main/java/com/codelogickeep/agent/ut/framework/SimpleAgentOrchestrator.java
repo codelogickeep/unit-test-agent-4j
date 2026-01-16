@@ -15,6 +15,7 @@ import com.codelogickeep.agent.ut.tools.MutationTestTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -927,7 +928,15 @@ public class SimpleAgentOrchestrator {
         if (targetFile == null)
             return null;
 
-        String normalized = targetFile.replace("\\", "/");
+        // 先转换为绝对路径
+        File file = new File(targetFile);
+        if (!file.isAbsolute()) {
+            file = file.getAbsoluteFile();
+        }
+        
+        String normalized = file.getPath().replace("\\", "/");
+        
+        // 方法1: 查找 /src/main/java/ 或 /src/ 目录
         int srcMainIndex = normalized.indexOf("/src/main/java/");
         if (srcMainIndex > 0) {
             return normalized.substring(0, srcMainIndex);
@@ -936,6 +945,22 @@ public class SimpleAgentOrchestrator {
         int srcIndex = normalized.indexOf("/src/");
         if (srcIndex > 0) {
             return normalized.substring(0, srcIndex);
+        }
+
+        // 方法2: 如果找不到 src 目录，向上查找 pom.xml（回退逻辑）
+        File current = file.isDirectory() ? file : file.getParentFile();
+        while (current != null) {
+            File pomFile = new File(current, "pom.xml");
+            if (pomFile.exists()) {
+                return current.getAbsolutePath();
+            }
+            current = current.getParentFile();
+        }
+
+        // 方法3: 如果都找不到，返回文件所在目录的父目录（至少保证有路径）
+        File parent = file.getParentFile();
+        if (parent != null) {
+            return parent.getAbsolutePath();
         }
 
         return null;

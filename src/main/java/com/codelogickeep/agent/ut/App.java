@@ -258,7 +258,7 @@ public class App implements Callable<Integer> {
             }
 
             // 5. Run Agent - 使用自研框架
-            System.out.println(">>> Using custom Agent framework (v1.1.0)");
+            System.out.println(">>> Using custom Agent framework");
             SimpleAgentOrchestrator orchestrator = new SimpleAgentOrchestrator(config, tools);
 
             if (projectDir != null && targetFile != null) {
