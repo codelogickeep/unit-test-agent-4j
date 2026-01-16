@@ -5,18 +5,18 @@
 # LLM Settings
 llm:
   protocol: "openai"                      # openai | openai-zhipu | anthropic | gemini
-  apiKey: "${env:UT_AGENT_API_KEY}"       # API Key (supports env var)
-  baseUrl: "${env:UT_AGENT_BASE_URL}"     # Base URL (auto handles /v1 suffix)
-  modelName: "${env:UT_AGENT_MODEL_NAME}" # Model name
+  api-key: "${env:UT_AGENT_API_KEY}"       # API Key (supports env var)
+  base-url: "${env:UT_AGENT_BASE_URL}"     # Base URL (auto handles /v1 suffix)
+  model-name: "${env:UT_AGENT_MODEL_NAME}" # Model name
   temperature: 0.0                        # 0.0 (precise) ~ 1.0 (creative)
   timeout: 120                            # Request timeout in seconds
-  customHeaders: {}                       # Custom HTTP headers (optional)
+  custom-headers: {}                       # Custom HTTP headers (optional)
     # X-Custom-Header: "value"
 
 # Workflow Settings
 workflow:
-  maxRetries: 5                           # Max retry attempts on failure
-  coverageThreshold: 80                   # Coverage threshold (%)
+  max-retries: 5                           # Max retry attempts on failure
+  coverage-threshold: 80                   # Coverage threshold (%)
   interactive: false                      # Interactive confirmation mode
   use-lsp: false                          # Use LSP for syntax check (auto-downloads JDT LS)
   iterative-mode: false                   # Enable iterative method testing mode
@@ -27,16 +27,16 @@ workflow:
 
 # Batch Mode Settings (for --project)
 batch:
-  excludePatterns: ""                     # Glob patterns to exclude (comma-separated)
+  exclude-patterns: ""                     # Glob patterns to exclude (comma-separated)
     # Example: "**/dto/**,**/vo/**,**/domain/**"
-  dryRun: false                           # Analyze only, no generation
+  dry-run: false                           # Analyze only, no generation
 
 # Incremental Mode Settings (for --incremental)
 incremental:
   mode: "uncommitted"                     # uncommitted | staged | compare
-  # baseRef: "main"                       # Base ref for compare mode (required for compare)
-  targetRef: "HEAD"                       # Target ref for compare mode
-  # excludePatterns: ".*Test\\.java"      # Regex patterns to exclude files
+  # base-ref: "main"                       # Base ref for compare mode (required for compare)
+  target-ref: "HEAD"                       # Target ref for compare mode
+  # exclude-patterns: ".*Test\\.java"      # Regex patterns to exclude files
 
 # Recommended Dependencies & Minimum Versions (for env check)
 dependencies:

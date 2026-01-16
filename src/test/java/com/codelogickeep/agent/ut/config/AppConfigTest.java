@@ -41,9 +41,9 @@ class AppConfigTest {
             String yaml = """
                 llm:
                   protocol: openai
-                  apiKey: test-key
-                  modelName: gpt-4
-                  baseUrl: https://api.openai.com
+                  api-key: test-key
+                  model-name: gpt-4
+                  base-url: https://api.openai.com
                   temperature: 0.7
                   timeout: 60
                 """;
@@ -88,9 +88,9 @@ class AppConfigTest {
             String yaml = """
                 incremental:
                   mode: compare
-                  baseRef: main
-                  targetRef: feature-branch
-                  excludePatterns: "**/test/**,**/generated/**"
+                  base-ref: main
+                  target-ref: feature-branch
+                  exclude-patterns: "**/test/**,**/generated/**"
                 """;
             
             AppConfig config = mapper.readValue(yaml, AppConfig.class);
@@ -107,8 +107,8 @@ class AppConfigTest {
         void shouldParseBatchConfig() throws Exception {
             String yaml = """
                 batch:
-                  excludePatterns: "**/test/**"
-                  dryRun: true
+                  exclude-patterns: "**/test/**"
+                  dry-run: true
                 """;
             
             AppConfig config = mapper.readValue(yaml, AppConfig.class);
@@ -147,7 +147,7 @@ class AppConfigTest {
             String yaml = """
                 llm:
                   protocol: openai
-                  apiKey: test-key
+                  api-key: test-key
                   unknownLlmField: ignored
                   futureFeature: true
                 """;
@@ -242,9 +242,9 @@ class AppConfigTest {
             String yaml = """
                 llm:
                   protocol: openai-zhipu
-                  apiKey: sk-xxx
-                  modelName: glm-4
-                  baseUrl: https://open.bigmodel.cn/api/coding/paas/v4
+                  api-key: sk-xxx
+                  model-name: glm-4
+                  base-url: https://open.bigmodel.cn/api/coding/paas/v4
                   temperature: 0.7
                   timeout: 120
                 
@@ -260,12 +260,12 @@ class AppConfigTest {
                 
                 incremental:
                   mode: compare
-                  baseRef: main
-                  targetRef: HEAD
+                  base-ref: main
+                  target-ref: HEAD
                 
                 batch:
-                  excludePatterns: "**/test/**"
-                  dryRun: false
+                  exclude-patterns: "**/test/**"
+                  dry-run: false
                 """;
             
             AppConfig config = mapper.readValue(yaml, AppConfig.class);
@@ -297,7 +297,7 @@ class AppConfigTest {
             String yaml = """
                 llm:
                   protocol: openai
-                  apiKey: test
+                  api-key: test
                   futureField1: ignored
                 workflow:
                   max-retries: 3
@@ -318,8 +318,8 @@ class AppConfigTest {
             String yaml = """
                 llm:
                   protocol: openai
-                  apiKey: ~
-                  modelName: null
+                  api-key: ~
+                  model-name: null
                 """;
             
             AppConfig config = mapper.readValue(yaml, AppConfig.class);

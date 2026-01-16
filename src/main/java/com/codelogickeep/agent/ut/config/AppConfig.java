@@ -21,7 +21,10 @@ public class AppConfig {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class BatchConfig {
+        @JsonProperty("exclude-patterns")
         private String excludePatterns;
+        
+        @JsonProperty("dry-run")
         private boolean dryRun = false;
     }
 
@@ -37,16 +40,19 @@ public class AppConfig {
          * 基准引用（用于 compare 模式）
          * 不预设任何分支名，完全由用户指定
          */
+        @JsonProperty("base-ref")
         private String baseRef;
 
         /**
          * 目标引用（用于 compare 模式，默认 HEAD）
          */
+        @JsonProperty("target-ref")
         private String targetRef = "HEAD";
 
         /**
          * 排除模式列表（逗号分隔）
          */
+        @JsonProperty("exclude-patterns")
         private String excludePatterns;
     }
 
@@ -61,11 +67,20 @@ public class AppConfig {
             this.protocol = provider;
         }
 
+        @JsonProperty("api-key")
         private String apiKey;
+        
+        @JsonProperty("model-name")
         private String modelName;
+        
         private Double temperature;
+        
+        @JsonProperty("base-url")
         private String baseUrl;
+        
         private Long timeout; // in seconds
+        
+        @JsonProperty("custom-headers")
         private Map<String, String> customHeaders;
     }
 

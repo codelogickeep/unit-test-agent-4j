@@ -72,7 +72,7 @@ utagent --target src/main/java/com/example/MyService.java
 
 # With knowledge base (learn from existing tests)
 utagent --target src/main/java/com/example/MyService.java \
-        -kb src/test/java
+  -kb src/test/java
 
 # Interactive mode (confirm before writes)
 utagent --target src/main/java/com/example/MyService.java -i
@@ -89,7 +89,7 @@ utagent --project /path/to/project
 
 # With exclusions
 utagent --project /path/to/project \
-        --exclude "**/dto/**,**/vo/**,**/entity/**"
+  --exclude "**/dto/**,**/vo/**,**/entity/**"
 
 # Dry-run (analyze only)
 utagent --project /path/to/project --dry-run
@@ -150,19 +150,19 @@ Create in project root, JAR directory, or `~/.utagent/`:
 # =============================================================================
 llm:
   protocol: "openai"                      # openai | openai-zhipu | anthropic | gemini
-  apiKey: "${env:UT_AGENT_API_KEY}"       # Supports environment variables
-  baseUrl: "${env:UT_AGENT_BASE_URL}"     # Optional, protocol default used
-  modelName: "gpt-4o"                     # Model name
+  api-key: "${env:UT_AGENT_API_KEY}"       # Supports environment variables
+  base-url: "${env:UT_AGENT_BASE_URL}"     # Optional, protocol default used
+  model-name: "gpt-4o"                     # Model name
   temperature: 0.0                        # 0.0 (precise) ~ 1.0 (creative)
   timeout: 120                            # Request timeout (seconds)
-  customHeaders: {}                       # Custom HTTP headers
+  custom-headers: {}                       # Custom HTTP headers
 
 # =============================================================================
 # Workflow Settings
 # =============================================================================
 workflow:
-  maxRetries: 5                           # Max retry on failure
-  coverageThreshold: 80                   # Target coverage (%)
+  max-retries: 5                           # Max retry on failure
+  coverage-threshold: 80                   # Target coverage (%)
   interactive: false                      # Confirm before writes
   use-lsp: false                          # Enable LSP syntax check
   iterative-mode: false                   # Per-method test generation
@@ -175,15 +175,15 @@ workflow:
 # Batch Mode Settings
 # =============================================================================
 batch:
-  excludePatterns: ""                     # Glob patterns to exclude
-  dryRun: false                           # Analyze only
-
+  exclude-patterns: ""                     # Glob patterns to exclude
+  dry-run: false                           # Analyze only
+  
 # =============================================================================
 # Incremental Mode Settings
 # =============================================================================
 incremental:
   mode: "uncommitted"                     # uncommitted | staged | compare
-  targetRef: "HEAD"                       # Target Git ref
+  target-ref: "HEAD"                       # Target Git ref
 
 # =============================================================================
 # Recommended Dependencies (for environment check)
@@ -205,19 +205,19 @@ dependencies:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `protocol` | string | `"openai"` | LLM provider protocol |
-| `apiKey` | string | - | API key (supports `${env:VAR}`) |
-| `baseUrl` | string | - | API base URL |
-| `modelName` | string | - | Model name |
+| `api-key` | string | - | API key (supports `${env:VAR}`) |
+| `base-url` | string | - | API base URL |
+| `model-name` | string | - | Model name |
 | `temperature` | float | `0.0` | Sampling temperature |
 | `timeout` | int | `120` | Request timeout (seconds) |
-| `customHeaders` | map | `{}` | Custom HTTP headers |
+| `custom-headers` | map | `{}` | Custom HTTP headers |
 
 ### Workflow Settings (`workflow`)
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `maxRetries` | int | `5` | Max retry attempts |
-| `coverageThreshold` | int | `80` | Target coverage % |
+| `max-retries` | int | `5` | Max retry attempts |
+| `coverage-threshold` | int | `80` | Target coverage % |
 | `interactive` | bool | `false` | Confirm before writes |
 | `use-lsp` | bool | `false` | Enable LSP syntax checking |
 | `iterative-mode` | bool | `false` | Per-method generation |
@@ -230,16 +230,16 @@ dependencies:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `excludePatterns` | string | `""` | Comma-separated glob patterns |
-| `dryRun` | bool | `false` | Analyze only mode |
+| `exclude-patterns` | string | `""` | Comma-separated glob patterns |
+| `dry-run` | bool | `false` | Analyze only mode |
 
 ### Incremental Settings (`incremental`)
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `mode` | string | `"uncommitted"` | `uncommitted` / `staged` / `compare` |
-| `baseRef` | string | - | Base Git ref (for compare mode) |
-| `targetRef` | string | `"HEAD"` | Target Git ref |
+| `base-ref` | string | - | Base Git ref (for compare mode) |
+| `target-ref` | string | `"HEAD"` | Target Git ref |
 
 ---
 

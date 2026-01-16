@@ -58,7 +58,7 @@ public class App implements Callable<Integer> {
     private String baseUrl;
 
     @Option(names = {
-            "--model" }, description = "Override LLM Model Name for this run. Does not save to config unless --save is used.")
+            "--model-name" }, description = "Override LLM Model Name for this run. Does not save to config unless --save is used.")
     private String modelName;
 
     @Option(names = {
@@ -470,8 +470,8 @@ public class App implements Callable<Integer> {
                     // 备份旧文件
                     File backupFile = new File(configFile.getParentFile(), "agent.yml.bak");
                     try {
-                        java.nio.file.Files.copy(configFile.toPath(), backupFile.toPath(), 
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        java.nio.file.Files.copy(configFile.toPath(), backupFile.toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                         System.err.println("Old config backed up to: " + backupFile.getAbsolutePath());
                     } catch (IOException backupErr) {
                         // 忽略备份失败
