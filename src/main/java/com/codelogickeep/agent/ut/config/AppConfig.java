@@ -72,7 +72,9 @@ public class AppConfig {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class WorkflowConfig {
+        @JsonProperty("max-retries")
         private int maxRetries;
+        @JsonProperty("coverage-threshold")
         private int coverageThreshold = 80; // 默认 80% 覆盖率阈值
         private boolean interactive = false; // 交互式确认模式
         @JsonProperty("use-lsp")
