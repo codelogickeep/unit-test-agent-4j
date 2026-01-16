@@ -160,8 +160,6 @@ public class LspSyntaxCheckerTool implements AgentTool {
             if (waitedMs >= maxWaitMs - 100) {
                 log.debug("LSP may still be indexing, waiting additional 1s...");
                 Thread.sleep(1000);
-                // 重新获取诊断（可能有新的）
-                diagnostics = diagnosticsCache.getOrDefault(uri, Collections.emptyList());
             }
             
             // 4. 获取诊断结果
