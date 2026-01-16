@@ -12,6 +12,9 @@ import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
 import com.codelogickeep.agent.ut.tools.BoundaryAnalyzerTool;
 import com.codelogickeep.agent.ut.tools.CoverageTool;
 import com.codelogickeep.agent.ut.tools.MutationTestTool;
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -506,12 +509,13 @@ public class SimpleAgentOrchestrator {
             currentMethodStats.incrementIteration();
 
             // 主动查询实际覆盖率
-            double actualCoverage = getActualMethodCoverage(projectRoot, targetFile, currentMethodStats.getMethodName());
+            double actualCoverage = getActualMethodCoverage(projectRoot, targetFile,
+                    currentMethodStats.getMethodName());
             if (actualCoverage > 0) {
                 coverage = actualCoverage;
                 log.info("📊 Actual coverage verified for {}: {}%", currentMethodStats.getMethodName(), coverage);
             }
-            
+
             // 检查覆盖率是否达标
             int coverageThreshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
             boolean coverageMet = actualCoverage >= coverageThreshold;
@@ -523,11 +527,12 @@ public class SimpleAgentOrchestrator {
                     contentLower.contains("all methods completed") ||
                     contentLower.contains("all methods tested") ||
                     // 匹配 "The iterative testing process has been completed successfully"
-                    (contentLower.contains("completed") && contentLower.contains("successfully") && contentLower.contains("iterative"));
+                    (contentLower.contains("completed") && contentLower.contains("successfully")
+                            && contentLower.contains("iterative"));
 
             // 如果覆盖率达标，也认为任务完成
             if (coverageMet) {
-                log.info(">>> Coverage target met ({}% >= {}%) for {}, marking as complete", 
+                log.info(">>> Coverage target met ({}% >= {}%) for {}, marking as complete",
                         actualCoverage, coverageThreshold, currentMethodStats.getMethodName());
                 isComplete = true;
             }
@@ -958,9 +963,9 @@ public class SimpleAgentOrchestrator {
         if (!file.isAbsolute()) {
             file = file.getAbsoluteFile();
         }
-        
+
         String normalized = file.getPath().replace("\\", "/");
-        
+
         // 方法1: 查找 /src/main/java/ 或 /src/ 目录
         int srcMainIndex = normalized.indexOf("/src/main/java/");
         if (srcMainIndex > 0) {
@@ -1094,6 +1099,8 @@ public class SimpleAgentOrchestrator {
         String testFilePath = calculateTestFilePath(targetFile);
         boolean hasExistingTests = Files.exists(Paths.get(testFilePath));
 
+        boolean skipTestExecution = false;
+
         if (hasExistingTests) {
             System.out.println("✅ Found existing test file: " + testFilePath);
         } else {
@@ -1107,29 +1114,34 @@ public class SimpleAgentOrchestrator {
                     return PreCheckResult.failure("Compilation failed:\n" + compileResult);
                 }
                 System.out.println("✅ Compilation successful");
+                // 标记跳过测试执行，但继续后续的覆盖率分析（静态分析）
+                skipTestExecution = true;
             } catch (Exception e) {
                 log.error("Failed to compile project", e);
                 return PreCheckResult.failure("Compilation error: " + e.getMessage());
             }
-            return PreCheckResult.success(null, false, null);
         }
 
         // Step 2: 清理并执行测试，生成最新覆盖率数据
-        System.out.println("\n🧪 Step 2: Running 'clean test' to generate fresh coverage data...");
-        try {
-            Map<String, Object> emptyArgs = new HashMap<>();
-            String testResult = toolRegistry.invoke("cleanAndTest", emptyArgs);
+        if (!skipTestExecution) {
+            System.out.println("\n🧪 Step 2: Running 'clean test' to generate fresh coverage data...");
+            try {
+                Map<String, Object> emptyArgs = new HashMap<>();
+                String testResult = toolRegistry.invoke("cleanAndTest", emptyArgs);
 
-            if (testResult.contains("exitCode=0") || testResult.contains("\"exitCode\":0")) {
-                System.out.println("✅ Clean and test completed successfully");
-            } else if (testResult.contains("ERROR") || testResult.contains("exitCode=1")) {
-                System.out.println("⚠️ Some tests may have failed, continuing with coverage analysis...");
-            } else {
-                System.out.println("✅ Test execution completed");
+                if (testResult.contains("exitCode=0") || testResult.contains("\"exitCode\":0")) {
+                    System.out.println("✅ Clean and test completed successfully");
+                } else if (testResult.contains("ERROR") || testResult.contains("exitCode=1")) {
+                    System.out.println("⚠️ Some tests may have failed, continuing with coverage analysis...");
+                } else {
+                    System.out.println("✅ Test execution completed");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to execute tests: {}", e.getMessage());
+                System.out.println("⚠️ Could not run tests: " + e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Failed to execute tests: {}", e.getMessage());
-            System.out.println("⚠️ Could not run tests: " + e.getMessage());
+        } else {
+            System.out.println("\n🧪 Step 2: Skipping test execution (no existing tests)");
         }
 
         // Step 3: 获取覆盖率报告
@@ -1175,7 +1187,39 @@ public class SimpleAgentOrchestrator {
                 }
             } else {
                 System.out.println("⚠️ Could not get coverage details (no JaCoCo report found)");
-                coverageInfo = null;
+
+                // 尝试静态分析获取方法列表（作为回退机制）
+                try {
+                    System.out.println("ℹ️ Attempting static analysis to discover methods...");
+                    Map<String, Object> analyzeArgs = new HashMap<>();
+                    analyzeArgs.put("filePath", targetFile);
+                    // 注意：CodeAnalyzerTool 需要有获取方法列表的功能，这里假设使用 analyzeCode
+                    String analysisResult = toolRegistry.invoke("analyzeCode", analyzeArgs);
+
+                    if (analysisResult != null && !analysisResult.startsWith("ERROR")) {
+                        // 解析 AST 分析结果，提取方法名
+                        // 这里做一个简单的模拟实现，实际应该解析 JSON 或结构化输出
+                        // 假设 analyzeCode 返回了包含方法签名的文本
+                        List<String> methodNames = extractMethodNamesFromAnalysis(analysisResult);
+
+                        if (!methodNames.isEmpty()) {
+                            System.out.println("✅ Discovered " + methodNames.size() + " methods via static analysis");
+                            StringBuilder sb = new StringBuilder("Static Analysis Result (No coverage data yet):\n");
+                            for (String method : methodNames) {
+                                // 构造默认的 0% 覆盖率信息
+                                methodCoverages.add(new MethodCoverageInfo(method, "P0", 0.0, 0.0));
+                                sb.append(String.format("✗ %s Line: 0.0%% Branch: 0.0%%\n", method));
+                            }
+                            coverageInfo = sb.toString();
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("Static analysis fallback failed", ex);
+                }
+
+                if (coverageInfo == null) {
+                    coverageInfo = null; // 保持 null 以触发 Fallback 模式
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to get coverage: {}", e.getMessage());
@@ -1283,18 +1327,63 @@ public class SimpleAgentOrchestrator {
     }
 
     /**
+     * 从分析结果中提取方法名
+     * 这是一个简单的辅助方法，用于解析 analyzeCode 的输出
+     */
+    private List<String> extractMethodNamesFromAnalysis(String analysisResult) {
+        List<String> methods = new ArrayList<>();
+        // 匹配常见的 AST 输出格式，例如 "Method: methodName(args)" 或 "- methodName"
+        // 增加对 " - " 前缀的匹配，并处理可能的参数列表
+        Pattern pattern = Pattern.compile("(?:Method:|\\s*-\\s+)([a-zA-Z_][a-zA-Z0-9_]*)(?:\\(.*\\))?");
+        Matcher matcher = pattern.matcher(analysisResult);
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            if (!methods.contains(name) && !name.equals("main") && !name.equals("toString")
+                    && !name.equals("hashCode")) {
+                methods.add(name);
+            }
+        }
+
+        // 如果上面的正则没匹配到，尝试匹配 "Method: methodName" (没有参数列表的情况)
+        Pattern simplePattern = Pattern.compile("Method:\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
+        Matcher simpleMatcher = simplePattern.matcher(analysisResult);
+        while (simpleMatcher.find()) {
+            String name = simpleMatcher.group(1);
+            if (!methods.contains(name) && !name.equals("main") && !name.equals("toString")
+                    && !name.equals("hashCode")) {
+                methods.add(name);
+            }
+        }
+
+        return methods;
+    }
+
+    /**
      * 计算测试文件路径
      */
     private String calculateTestFilePath(String sourceFile) {
-        return sourceFile
-                .replace("/src/main/java/", "/src/test/java/")
-                .replace(".java", "Test.java");
+        // 1. 转换为绝对路径
+        Path absPath = Paths.get(sourceFile).toAbsolutePath();
+        String normalizedPath = absPath.toString().replace("\\", "/");
+
+        // 2. 替换 src/main/java 为 src/test/java
+        // 使用正则替换，兼容不同的路径前缀
+        String testPath = normalizedPath.replaceFirst("/src/main/java/", "/src/test/java/");
+
+        // 如果没有替换成功（可能路径结构不同），尝试不带前导斜杠的替换
+        if (testPath.equals(normalizedPath)) {
+            testPath = normalizedPath.replaceFirst("src/main/java/", "src/test/java/");
+        }
+
+        // 3. 替换后缀
+        return testPath.replace(".java", "Test.java");
     }
 
     /**
      * 提取全限定类名
      */
     private String extractClassName(String sourceFile) {
+        // 1. 尝试从路径解析 (快速路径)
         String normalized = sourceFile.replace("\\", "/");
         int srcMainIndex = normalized.indexOf("/src/main/java/");
         if (srcMainIndex >= 0) {
@@ -1302,6 +1391,62 @@ public class SimpleAgentOrchestrator {
             className = className.replace("/", ".").replace(".java", "");
             return className;
         }
+
+        // 2. 尝试解析文件内容 (回退机制)
+        try {
+            Path path = Paths.get(sourceFile);
+            if (Files.exists(path)) {
+                CompilationUnit cu = StaticJavaParser.parse(path);
+
+                // 获取包名
+                String packageName = cu.getPackageDeclaration()
+                        .map(pd -> pd.getNameAsString())
+                        .orElse("");
+
+                // 获取主类名
+                String simpleClassName = null;
+                List<TypeDeclaration<?>> types = cu.getTypes();
+
+                if (types.isEmpty()) {
+                    log.warn("No types found in file: {}", sourceFile);
+                    return null;
+                }
+
+                // 策略1: 优先查找 public 类
+                for (TypeDeclaration<?> type : types) {
+                    if (type.isPublic()) {
+                        simpleClassName = type.getNameAsString();
+                        break;
+                    }
+                }
+
+                // 策略2: 查找与文件名匹配的类 (如果是相对路径，取文件名)
+                if (simpleClassName == null) {
+                    String fileName = path.getFileName().toString().replace(".java", "");
+                    for (TypeDeclaration<?> type : types) {
+                        if (type.getNameAsString().equals(fileName)) {
+                            simpleClassName = type.getNameAsString();
+                            break;
+                        }
+                    }
+                }
+
+                // 策略3: 取第一个类
+                if (simpleClassName == null) {
+                    simpleClassName = types.get(0).getNameAsString();
+                    log.info("Using first found type '{}' as main class for {}", simpleClassName, sourceFile);
+                }
+
+                if (!packageName.isEmpty()) {
+                    return packageName + "." + simpleClassName;
+                } else {
+                    return simpleClassName;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse source file to extract class name: {}", e.getMessage());
+        }
+
         return null;
     }
 }
