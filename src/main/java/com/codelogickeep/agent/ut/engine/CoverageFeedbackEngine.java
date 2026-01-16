@@ -34,7 +34,7 @@ public class CoverageFeedbackEngine {
 
     private final List<FeedbackIteration> iterationHistory = new ArrayList<>();
     private int currentIteration = 0;
-    
+
     // 停滞检测配置
     private int maxStaleIterations = 3;          // 最大无进展迭代次数
     private int minCoverageGainPerIteration = 1; // 每次迭代最小覆盖率提升

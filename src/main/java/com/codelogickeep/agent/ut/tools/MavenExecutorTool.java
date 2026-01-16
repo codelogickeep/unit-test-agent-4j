@@ -83,9 +83,18 @@ public class MavenExecutorTool implements AgentTool {
     }
 
 
-    @Tool("Compile the project (src and test) using Maven. Useful to check for syntax errors before running tests.")
+    @Tool("Compile the project (src and test) using Maven. IMPORTANT: Must run checkSyntax() first and ensure it passes before calling this.")
     public ExecutionResult compileProject() throws IOException, InterruptedException {
         log.info("Tool Input - compileProject");
+        
+        // 检查编译守卫
+        CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
+        if (!checkResult.canCompile()) {
+            log.warn("Compile blocked by CompileGuard: {}", checkResult.blockReason());
+            // 返回一个特殊的错误结果，而不是抛出异常
+            return new ExecutionResult(-1, "", checkResult.blockReason());
+        }
+        
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {

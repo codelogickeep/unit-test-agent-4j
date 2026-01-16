@@ -13,6 +13,7 @@
 - 💾 **知识库索引持久化** - 缓存索引，避免每次启动重建
 - 🔍 **变更影响范围分析** - 分析依赖图，识别代码变更影响的测试
 - 🛑 **智能停滞检测** - 覆盖率停止增长时智能停止迭代
+- 🛡️ **编译守卫机制** - 工具层面强制约束：语法检查必须通过才能编译
 - ⚙️ **新配置项** - `max-stale-iterations`、`min-coverage-gain` 提供精细控制
 - 📦 **自动版本检测** - 构建脚本自动获取最新 release 版本
 
@@ -744,8 +745,27 @@ Agent 可以使用以下工具：
 
 | 工具 | 说明 |
 |------|------|
-| `compileProject` | 运行 `mvn compile` |
+| `compileProject` | 运行 `mvn compile`（语法检查未通过时会被阻止） |
 | `executeTest` | 运行特定测试类 |
+
+### 编译守卫 (v2.1.0)
+
+`CompileGuard` 在工具层面强制执行"先语法检查再编译"的工作流：
+
+```
+writeFile(*.java) → markFileModified()
+     ↓
+checkSyntax() → 通过 → markSyntaxPassed() → compileProject() ✅
+     ↓
+   失败 → markSyntaxFailed() → 修复代码 → 重新检查
+     ↓
+未通过 checkSyntax() 直接调用 compileProject() → ❌ COMPILE_BLOCKED
+```
+
+**优势：**
+- 防止对无效代码进行无效编译尝试
+- 提供清晰的修复指引
+- 减少迭代次数和 Token 消耗
 
 ### 覆盖率工具
 
@@ -857,6 +877,7 @@ flowchart TB
             LSPC[LspSyntaxCheckerTool<br/>JDT LS]
         end
         subgraph BuildTools["构建测试"]
+            CG[CompileGuard<br/>🛡️ 编译守卫]
             ME[MavenExecutorTool]
             COV[CoverageTool]
             MUT[MutationTestTool]
@@ -875,6 +896,11 @@ flowchart TB
     EA --> SAO
     SAO --> EXE
     EXE --> Tools
+    
+    FS -.->|标记已修改| CG
+    SC -.->|标记通过/失败| CG
+    LSPC -.->|标记通过/失败| CG
+    CG -.->|可以编译?| ME
 
     style Input fill:#e1f5fe
     style Config fill:#fff3e0
@@ -894,6 +920,7 @@ flowchart TB
 | **Agent 框架** | 自研轻量级框架 | 多 LLM 支持的 ReAct 循环 |
 | **编排器** | SimpleAgentOrchestrator | 核心循环，支持重试和流式输出 |
 | **反馈引擎** | CoverageFeedbackEngine | 智能覆盖率分析和改进建议 |
+| **编译守卫** | CompileGuard | 工具层面强制语法检查通过才能编译 |
 | **工具层** | 15+ 工具 | 文件、代码、构建、Git、覆盖率操作 |
 
 ### 自研框架 vs LangChain4j

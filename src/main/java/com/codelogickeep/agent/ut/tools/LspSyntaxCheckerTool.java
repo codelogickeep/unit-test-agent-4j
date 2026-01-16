@@ -314,6 +314,22 @@ public class LspSyntaxCheckerTool implements AgentTool {
     }
 
     private String formatDiagnostics(String filePath, List<Diagnostic> diagnostics) {
+        // 检查是否有错误级别的诊断
+        boolean hasErrors = diagnostics.stream()
+                .anyMatch(d -> d.getSeverity() == DiagnosticSeverity.Error);
+        
+        // 更新编译守卫状态
+        if (!hasErrors) {
+            CompileGuard.getInstance().markSyntaxPassed(filePath);
+        } else {
+            String errorSummary = diagnostics.stream()
+                    .filter(d -> d.getSeverity() == DiagnosticSeverity.Error)
+                    .map(Diagnostic::getMessage)
+                    .reduce((a, b) -> a + "; " + b)
+                    .orElse("Unknown errors");
+            CompileGuard.getInstance().markSyntaxFailed(filePath, errorSummary);
+        }
+        
         if (diagnostics.isEmpty()) {
             return "LSP_OK: No errors found in " + filePath;
         }

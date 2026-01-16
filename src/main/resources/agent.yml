@@ -18,6 +18,7 @@ workflow:
   maxRetries: 5                           # Max retry attempts on failure
   coverageThreshold: 80                   # Coverage threshold (%)
   interactive: false                      # Interactive confirmation mode
+  use-lsp: false                          # Use LSP for syntax check (auto-downloads JDT LS)
   # default-skill: "full"                 # Default skill name (null = use all tools)
   iterative-mode: false                   # Enable iterative method testing mode
   method-coverage-threshold: 80           # Per-method coverage threshold (%)
@@ -30,6 +31,13 @@ batch:
   excludePatterns: ""                     # Glob patterns to exclude (comma-separated)
     # Example: "**/dto/**,**/vo/**,**/domain/**"
   dryRun: false                           # Analyze only, no generation
+
+# Incremental Mode Settings (for --incremental)
+incremental:
+  mode: "uncommitted"                     # uncommitted | staged | compare
+  # baseRef: "main"                       # Base ref for compare mode (required for compare)
+  targetRef: "HEAD"                       # Target ref for compare mode
+  # excludePatterns: ".*Test\\.java"      # Regex patterns to exclude files
 
 # Recommended Dependencies & Minimum Versions (for env check)
 dependencies:

@@ -159,7 +159,15 @@ public class FileSystemTool implements AgentTool {
             }
 
             Files.writeString(p, newContent, StandardCharsets.UTF_8);
-            String successMsg = "SUCCESS: File updated: " + path;
+            
+            // 如果是 Java 文件，通知编译守卫
+            if (path.endsWith(".java")) {
+                CompileGuard.getInstance().markFileModified(p.toString());
+                log.debug("CompileGuard notified: {} modified, needs syntax check", path);
+            }
+            
+            String successMsg = "SUCCESS: File updated: " + path + 
+                    (path.endsWith(".java") ? " (⚠️ Run checkSyntax before compileProject)" : "");
             log.info("Tool Output - searchReplace: {}", successMsg);
             return successMsg;
         } catch (Exception e) {
@@ -225,7 +233,15 @@ public class FileSystemTool implements AgentTool {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, content, StandardCharsets.UTF_8);
-            String successMsg = "SUCCESS: File written: " + path;
+            
+            // 如果是 Java 文件，通知编译守卫
+            if (path.endsWith(".java")) {
+                CompileGuard.getInstance().markFileModified(p.toString());
+                log.debug("CompileGuard notified: {} modified, needs syntax check", path);
+            }
+            
+            String successMsg = "SUCCESS: File written: " + path + 
+                    (path.endsWith(".java") ? " (⚠️ Run checkSyntax before compileProject)" : "");
             log.info("Tool Output - writeFile: {}", successMsg);
             return successMsg;
         } catch (AgentToolException e) {
@@ -279,7 +295,15 @@ public class FileSystemTool implements AgentTool {
                 Files.createDirectories(p.getParent());
             }
             Files.writeString(p, finalContent.toString(), StandardCharsets.UTF_8);
-            String successMsg = "SUCCESS: File modified from line " + startLine + ": " + path;
+            
+            // 如果是 Java 文件，通知编译守卫
+            if (path.endsWith(".java")) {
+                CompileGuard.getInstance().markFileModified(p.toString());
+                log.debug("CompileGuard notified: {} modified, needs syntax check", path);
+            }
+            
+            String successMsg = "SUCCESS: File modified from line " + startLine + ": " + path + 
+                    (path.endsWith(".java") ? " (⚠️ Run checkSyntax before compileProject)" : "");
             log.info("Tool Output - writeFileFromLine: {}", successMsg);
             return successMsg;
         } catch (AgentToolException e) {

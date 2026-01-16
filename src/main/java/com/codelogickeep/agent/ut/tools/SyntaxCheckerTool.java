@@ -178,7 +178,14 @@ public class SyntaxCheckerTool implements AgentTool {
             });
         }
         
-        // 3. 构建结果
+        // 3. 更新编译守卫状态
+        if (errors.isEmpty()) {
+            CompileGuard.getInstance().markSyntaxPassed(fileName);
+        } else {
+            CompileGuard.getInstance().markSyntaxFailed(fileName, errors.toString());
+        }
+        
+        // 4. 构建结果
         StringBuilder result = new StringBuilder();
         
         if (errors.isEmpty() && warnings.isEmpty()) {

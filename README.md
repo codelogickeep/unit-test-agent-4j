@@ -13,6 +13,7 @@ An enterprise-grade Java Unit Test Agent that automatically generates high-quali
 - 💾 **Knowledge Base Index Persistence** - Cache indexes to avoid rebuilding on every startup
 - 🔍 **Change Impact Analysis** - Analyze dependency graph to identify affected tests when code changes
 - 🛑 **Smart Stagnation Detection** - Intelligent stop when coverage stops improving
+- 🛡️ **Compile Guard** - Tool-level enforcement: syntax check must pass before compilation
 - ⚙️ **New Config Options** - `max-stale-iterations`, `min-coverage-gain` for fine-tuned control
 - 📦 **Auto Version Detection** - Build script now automatically fetches the latest release version
 
@@ -771,8 +772,27 @@ The agent has access to the following tools:
 
 | Tool | Description |
 |------|-------------|
-| `compileProject` | Run `mvn compile` |
+| `compileProject` | Run `mvn compile` (blocked if syntax check not passed) |
 | `executeTest` | Run specific test class |
+
+### Compile Guard (v2.1.0)
+
+The `CompileGuard` enforces a "syntax check before compile" workflow at the tool level:
+
+```
+writeFile(*.java) → markFileModified()
+     ↓
+checkSyntax() → PASS → markSyntaxPassed() → compileProject() ✅
+     ↓
+   FAIL → markSyntaxFailed() → Fix code → Re-check
+     ↓
+compileProject() without passing checkSyntax() → ❌ COMPILE_BLOCKED
+```
+
+**Benefits:**
+- Prevents wasteful compilation attempts on invalid code
+- Provides clear guidance on required actions
+- Reduces iteration cycles and token usage
 
 ### Coverage Tools
 
@@ -884,6 +904,7 @@ flowchart TB
             LSPC[LspSyntaxCheckerTool<br/>JDT LS]
         end
         subgraph BuildTools["Build & Test"]
+            CG[CompileGuard<br/>🛡️ Syntax Gate]
             ME[MavenExecutorTool]
             COV[CoverageTool]
             MUT[MutationTestTool]
@@ -902,6 +923,11 @@ flowchart TB
     EA --> SAO
     SAO --> EXE
     EXE --> Tools
+    
+    FS -.->|markModified| CG
+    SC -.->|markPassed/Failed| CG
+    LSPC -.->|markPassed/Failed| CG
+    CG -.->|canCompile?| ME
 
     style Input fill:#e1f5fe
     style Config fill:#fff3e0
@@ -921,6 +947,7 @@ flowchart TB
 | **Framework** | Custom Agent Framework | Lightweight ReAct loop with multi-LLM support |
 | **Orchestrator** | SimpleAgentOrchestrator | Core loop with retry and streaming |
 | **Feedback** | CoverageFeedbackEngine | Intelligent coverage analysis and improvement suggestions |
+| **Guard** | CompileGuard | Enforces syntax check before compilation at tool level |
 | **Tools** | 15+ Tools | File, Code, Build, Git, Coverage operations |
 
 ### Custom Framework vs LangChain4j
