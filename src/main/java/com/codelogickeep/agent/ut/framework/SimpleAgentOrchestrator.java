@@ -969,20 +969,21 @@ public class SimpleAgentOrchestrator {
             }
         }
 
-        sb.append("""
-                Please complete these steps:
-                1. Check if test directory exists (directoryExists)
-                2. Check if test file exists (fileExists)
-                3. Read the source file (readFile)
-                4. Create the test file skeleton if it doesn't exist (writeFile with basic imports and class declaration)
+        sb.append(
+                """
+                        Please complete these steps:
+                        1. Check if test directory exists (directoryExists)
+                        2. Check if test file exists (fileExists)
+                        3. Read the source file (readFile)
+                        4. Create the test file skeleton if it doesn't exist (writeFile with basic imports and class declaration)
 
-                ⚠️ IMPORTANT:
-                - DO NOT call getPriorityMethods or initMethodIteration - already done by system
-                - DO NOT call getNextMethod - the orchestrator will handle method iteration
-                - Just ensure the test file exists with proper skeleton
+                        ⚠️ IMPORTANT:
+                        - DO NOT call getPriorityMethods or initMethodIteration - already done by system
+                        - DO NOT call getNextMethod - the orchestrator will handle method iteration
+                        - Just ensure the test file exists with proper skeleton
 
-                After creating the test skeleton, STOP and wait for next instruction.
-                """);
+                        After creating the test skeleton, STOP and wait for next instruction.
+                        """);
 
         return sb.toString();
     }

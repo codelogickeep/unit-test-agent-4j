@@ -8,6 +8,7 @@ public class VerificationResult {
     private VerificationStep failedStep;
     private String errorMessage;
     private String errorDetails;
+    private String details;  // 通用详情，包括成功时的工具输出
     private double coverage;
     private boolean coverageThresholdMet;
     private int retryCount;
@@ -64,6 +65,14 @@ public class VerificationResult {
     
     public void setErrorDetails(String errorDetails) {
         this.errorDetails = errorDetails;
+    }
+    
+    public String getDetails() {
+        return details;
+    }
+    
+    public void setDetails(String details) {
+        this.details = details;
     }
     
     public double getCoverage() {

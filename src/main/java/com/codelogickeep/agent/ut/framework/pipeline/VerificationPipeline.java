@@ -62,8 +62,13 @@ public class VerificationPipeline {
         }
         System.out.println("✅ 语法检查通过");
         
-        // Step 2: LSP 语法检查（如果启用）
-        if (lspEnabled) {
+        // Step 2: LSP 语法检查
+        // 注意：checkSyntax 内部已经集成了 LSP 检查（如果启用），
+        // 输出包含 "JavaParser + LSP" 时表示 LSP 已完成，无需再单独调用
+        String syntaxDetails = syntaxResult.getDetails();
+        boolean lspAlreadyDone = syntaxDetails != null && syntaxDetails.contains("JavaParser + LSP");
+        
+        if (lspEnabled && !lspAlreadyDone) {
             System.out.println("\n🔍 Step 2/5: LSP语义检查...");
             VerificationResult lspResult = runLspCheck(testFilePath);
             if (!lspResult.isSuccess()) {
@@ -72,6 +77,8 @@ public class VerificationPipeline {
                 return lspResult;
             }
             System.out.println("✅ LSP检查通过");
+        } else if (lspAlreadyDone) {
+            System.out.println("\n✅ Step 2/5: LSP检查已在语法检查中完成");
         } else {
             System.out.println("\n⏭️ Step 2/5: LSP检查已跳过（未启用）");
         }
@@ -141,13 +148,18 @@ public class VerificationPipeline {
             // 解析结果
             if (result.contains("VALID") || result.contains("LSP_OK") || result.contains("No errors") ||
                 result.contains("SYNTAX_OK")) {
-                return VerificationResult.success(0, false);
+                // 保存工具输出到 details，用于判断是否已包含 LSP 检查
+                VerificationResult successResult = VerificationResult.success(0, false);
+                successResult.setDetails(result);
+                return successResult;
             } else if (result.contains("ERROR") || result.contains("LSP_ERRORS") || result.contains("INVALID")) {
                 return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, "语法错误", result);
             }
             
             // 默认认为通过
-            return VerificationResult.success(0, false);
+            VerificationResult defaultResult = VerificationResult.success(0, false);
+            defaultResult.setDetails(result);
+            return defaultResult;
         } catch (Exception e) {
             log.error("Syntax check exception", e);
             return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, e.getMessage());
