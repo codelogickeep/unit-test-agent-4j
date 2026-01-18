@@ -9,6 +9,7 @@ import com.codelogickeep.agent.ut.framework.executor.AgentResult;
 import com.codelogickeep.agent.ut.framework.executor.ConsoleStreamingHandler;
 import com.codelogickeep.agent.ut.framework.model.IterationStats;
 import com.codelogickeep.agent.ut.framework.phase.PhaseManager;
+import com.codelogickeep.agent.ut.framework.phase.WorkflowPhase;
 import com.codelogickeep.agent.ut.framework.precheck.PreCheckExecutor;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
 import com.codelogickeep.agent.ut.framework.util.ClassNameExtractor;
@@ -245,6 +246,12 @@ public class SimpleAgentOrchestrator {
 
         // ===== Phase 1: 初始化（创建测试文件骨架）=====
         log.info(">>> Phase 1: Initialization");
+        
+        // 切换到分析阶段工具集
+        if (phaseManager.isEnablePhaseSwitching()) {
+            phaseManager.switchToPhase(WorkflowPhase.ANALYSIS, toolRegistry);
+            log.info("🔧 Switched to ANALYSIS phase ({} tools)", toolRegistry.size());
+        }
 
         AgentExecutor initExecutor = createExecutor(systemPrompt, 8);
         initExecutor.setTokenStatsCallback((prompt, response) -> {
@@ -293,15 +300,21 @@ public class SimpleAgentOrchestrator {
 
             // 外层循环：覆盖率不足时继续生成测试
             while (!methodCompleted && coverageRetryCount < maxMethodRetries) {
-                
+
                 // Step 1: 让 LLM 生成测试代码
+                // 切换到生成阶段工具集
+                if (phaseManager.isEnablePhaseSwitching()) {
+                    phaseManager.switchToPhase(WorkflowPhase.GENERATION, toolRegistry);
+                    log.debug("🔧 Switched to GENERATION phase ({} tools)", toolRegistry.size());
+                }
+                
                 log.info("🤖 Step 1: Generating tests for method {}", methodInfo.getMethodName());
                 String generatePrompt = coverageRetryCount == 0
-                        ? FixPromptBuilder.buildGenerateTestPrompt(targetFile, methodInfo.getMethodName(), 
+                        ? FixPromptBuilder.buildGenerateTestPrompt(targetFile, methodInfo.getMethodName(),
                                 testFilePath, currentCoverage)
                         : FixPromptBuilder.buildMoreTestsPrompt(targetFile, methodInfo.getMethodName(),
                                 testFilePath, currentCoverage, coverageThreshold);
-                
+
                 boolean codeGenerated = runLlmAndWait(systemPrompt, generatePrompt, currentMethodStats);
                 if (!codeGenerated) {
                     log.error("❌ Failed to generate test code for method {}", methodInfo.getMethodName());
@@ -311,6 +324,12 @@ public class SimpleAgentOrchestrator {
                 }
 
                 // Step 2: 自动执行验证管道（带修复循环）
+                // 切换到验证阶段工具集
+                if (phaseManager.isEnablePhaseSwitching()) {
+                    phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
+                    log.debug("🔧 Switched to VERIFICATION phase ({} tools)", toolRegistry.size());
+                }
+                
                 log.info("🔄 Step 2: Running verification pipeline");
                 int verificationRetryCount = 0;
                 VerificationResult verifyResult = null;
@@ -324,18 +343,23 @@ public class SimpleAgentOrchestrator {
                         break;
                     }
 
-                    // 验证失败，调用 LLM 修复
+                    // 验证失败，切换到修复阶段，调用 LLM 修复
+                    if (phaseManager.isEnablePhaseSwitching()) {
+                        phaseManager.switchToPhase(WorkflowPhase.REPAIR, toolRegistry);
+                        log.debug("🔧 Switched to REPAIR phase ({} tools)", toolRegistry.size());
+                    }
+                    
                     log.warn("⚠️ Verification failed at step: {}", verifyResult.getFailedStep());
                     String fixPrompt = buildFixPromptForStep(verifyResult, testFilePath, testClassName);
-                    
+
                     boolean fixed = runLlmAndWait(systemPrompt, fixPrompt, currentMethodStats);
                     if (!fixed) {
                         log.error("❌ Failed to fix error");
                         break;
                     }
-                    
+
                     verificationRetryCount++;
-                    log.info("🔄 Retrying verification (attempt {}/{})", 
+                    log.info("🔄 Retrying verification (attempt {}/{})",
                             verificationRetryCount + 1, maxVerificationRetries);
                 }
 
@@ -383,10 +407,10 @@ public class SimpleAgentOrchestrator {
     /**
      * 运行 LLM 并等待完成
      */
-    private boolean runLlmAndWait(String systemPrompt, String userPrompt, 
+    private boolean runLlmAndWait(String systemPrompt, String userPrompt,
             IterationStats.MethodStats methodStats) {
         AgentExecutor executor = createExecutor(systemPrompt, 10);
-        
+
         if (methodStats != null) {
             executor.setTokenStatsCallback((prompt, response) -> {
                 methodStats.addPromptTokens(prompt);
@@ -419,7 +443,7 @@ public class SimpleAgentOrchestrator {
     private String buildFixPromptForStep(VerificationResult result, String testFilePath, String testClassName) {
         VerificationStep failedStep = result.getFailedStep();
         String errorDetails = result.getErrorDetails() != null ? result.getErrorDetails() : result.getErrorMessage();
-        
+
         return switch (failedStep) {
             case SYNTAX_CHECK -> FixPromptBuilder.buildSyntaxFixPrompt(testFilePath, errorDetails);
             case LSP_CHECK -> FixPromptBuilder.buildLspFixPrompt(testFilePath, errorDetails);
