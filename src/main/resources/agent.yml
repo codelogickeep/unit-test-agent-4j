@@ -24,7 +24,6 @@ workflow:
   skip-low-priority: false                # Skip low-priority methods (P2) in iterative mode
   max-stale-iterations: 3                 # Stop after N iterations without progress
   min-coverage-gain: 1                    # Minimum coverage gain (%) per iteration to continue
-  enable-phase-switching: false           # Enable dynamic phase switching (default: false for backward compatibility)
 
 # Batch Mode Settings (for --project)
 batch:

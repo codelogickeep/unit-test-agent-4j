@@ -27,26 +27,26 @@ class PhaseManagerTest {
         config = mock(AppConfig.class);
         WorkflowConfig workflowConfig = mock(WorkflowConfig.class);
         when(config.getWorkflow()).thenReturn(workflowConfig);
-        when(workflowConfig.isEnablePhaseSwitching()).thenReturn(true);
+        when(workflowConfig.isIterativeMode()).thenReturn(true);
 
         phaseManager = new PhaseManager(config, allTools);
     }
 
     @Test
-    void testInitialPhaseIsAnalysisWhenEnabled() {
+    void testInitialPhaseIsAnalysisWhenIterativeMode() {
         assertEquals(WorkflowPhase.ANALYSIS, phaseManager.getCurrentPhase());
-        assertTrue(phaseManager.isEnablePhaseSwitching());
+        assertTrue(phaseManager.isIterativeMode());
     }
 
     @Test
-    void testInitialPhaseIsFullWhenDisabled() {
+    void testInitialPhaseIsFullWhenNotIterativeMode() {
         WorkflowConfig workflowConfig = mock(WorkflowConfig.class);
-        when(workflowConfig.isEnablePhaseSwitching()).thenReturn(false);
+        when(workflowConfig.isIterativeMode()).thenReturn(false);
         when(config.getWorkflow()).thenReturn(workflowConfig);
 
         PhaseManager disabledManager = new PhaseManager(config, allTools);
         assertEquals(WorkflowPhase.FULL, disabledManager.getCurrentPhase());
-        assertFalse(disabledManager.isEnablePhaseSwitching());
+        assertFalse(disabledManager.isIterativeMode());
     }
 
     @Test

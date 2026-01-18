@@ -9,6 +9,8 @@ import java.util.List;
 
 /**
  * 阶段管理器 - 负责阶段切换和工具重新加载
+ * 
+ * 阶段切换在迭代模式下自动启用，用于减少 token 消耗
  */
 public class PhaseManager {
     private static final Logger log = LoggerFactory.getLogger(PhaseManager.class);
@@ -16,27 +18,28 @@ public class PhaseManager {
     private final PhaseContext context;
     private final AppConfig config;
     private final List<Object> allTools;
-    private final boolean enablePhaseSwitching;
+    private final boolean iterativeMode;
 
     public PhaseManager(AppConfig config, List<Object> allTools) {
         this.config = config;
         this.allTools = allTools;
-        this.enablePhaseSwitching = config.getWorkflow().isEnablePhaseSwitching();
+        // 在迭代模式下自动启用阶段切换
+        this.iterativeMode = config.getWorkflow() != null && config.getWorkflow().isIterativeMode();
 
-        // 初始化阶段上下文
-        WorkflowPhase initialPhase = enablePhaseSwitching ? WorkflowPhase.ANALYSIS : WorkflowPhase.FULL;
+        // 初始化阶段上下文：迭代模式从 ANALYSIS 开始，否则使用 FULL
+        WorkflowPhase initialPhase = iterativeMode ? WorkflowPhase.ANALYSIS : WorkflowPhase.FULL;
         this.context = new PhaseContext(initialPhase);
 
-        log.info("PhaseManager initialized with phase switching: {}, initial phase: {}",
-                enablePhaseSwitching, initialPhase);
+        log.info("PhaseManager initialized: iterativeMode={}, initial phase: {}",
+                iterativeMode, initialPhase);
     }
 
     /**
      * 切换到指定阶段
      */
     public void switchToPhase(WorkflowPhase phase, ToolRegistry toolRegistry) {
-        if (!enablePhaseSwitching) {
-            log.debug("Phase switching disabled, staying in FULL mode");
+        if (!iterativeMode) {
+            log.debug("Not in iterative mode, staying in FULL mode");
             return;
         }
 
@@ -63,7 +66,7 @@ public class PhaseManager {
      * 根据 LLM 响应智能切换阶段
      */
     public void smartSwitch(String llmResponse, ToolRegistry toolRegistry) {
-        if (!enablePhaseSwitching) {
+        if (!iterativeMode) {
             return;
         }
 
@@ -110,7 +113,7 @@ public class PhaseManager {
         return context.getCurrentPhase();
     }
 
-    public boolean isEnablePhaseSwitching() {
-        return enablePhaseSwitching;
+    public boolean isIterativeMode() {
+        return iterativeMode;
     }
 }

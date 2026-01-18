@@ -23,7 +23,7 @@ class SimpleAgentOrchestratorTest {
 
         // 设置 WorkflowConfig 以避免 NPE
         AppConfig.WorkflowConfig workflowConfig = new AppConfig.WorkflowConfig();
-        workflowConfig.setEnablePhaseSwitching(false); // 默认关闭阶段切换
+        workflowConfig.setIterativeMode(false); // 默认关闭迭代模式
         config.setWorkflow(workflowConfig);
 
         return new SimpleAgentOrchestrator(config, new ArrayList<>());

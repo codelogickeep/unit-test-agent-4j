@@ -265,11 +265,6 @@ workflow:
   # 最小覆盖率增益（v2.1.0）
   min-coverage-gain: 1.0
 
-  # 启用动态阶段切换（v2.2.0）
-  # 根据工作流阶段动态加载工具子集，节省 40-60% Token
-  # ANALYSIS → GENERATION → VERIFICATION → REPAIR
-  enable-phase-switching: false
-
 # 增量模式配置
 incremental:
   # 模式: UNCOMMITTED | STAGED_ONLY | COMPARE_REFS

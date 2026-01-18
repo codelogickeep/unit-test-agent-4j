@@ -78,7 +78,7 @@ public class SimpleAgentOrchestrator {
         this.phaseManager = new PhaseManager(config, tools);
 
         // 根据阶段管理器加载工具
-        if (phaseManager.isEnablePhaseSwitching()) {
+        if (phaseManager.isIterativeMode()) {
             // 阶段切换模式：只加载当前阶段的工具
             phaseManager.switchToPhase(phaseManager.getCurrentPhase(), toolRegistry);
         } else {
@@ -98,7 +98,7 @@ public class SimpleAgentOrchestrator {
         this.verificationPipeline = new VerificationPipeline(toolRegistry, config);
 
         log.info("SimpleAgentOrchestrator initialized with {} tools, phase switching: {}",
-                toolRegistry.size(), phaseManager.isEnablePhaseSwitching());
+                toolRegistry.size(), phaseManager.isIterativeMode());
     }
 
     /**
@@ -248,7 +248,7 @@ public class SimpleAgentOrchestrator {
         log.info(">>> Phase 1: Initialization");
 
         // 切换到分析阶段工具集
-        if (phaseManager.isEnablePhaseSwitching()) {
+        if (phaseManager.isIterativeMode()) {
             phaseManager.switchToPhase(WorkflowPhase.ANALYSIS, toolRegistry);
             log.info("🔧 Switched to ANALYSIS phase ({} tools)", toolRegistry.size());
         }
@@ -303,7 +303,7 @@ public class SimpleAgentOrchestrator {
 
                 // Step 1: 让 LLM 生成测试代码
                 // 切换到生成阶段工具集
-                if (phaseManager.isEnablePhaseSwitching()) {
+                if (phaseManager.isIterativeMode()) {
                     phaseManager.switchToPhase(WorkflowPhase.GENERATION, toolRegistry);
                     log.debug("🔧 Switched to GENERATION phase ({} tools)", toolRegistry.size());
                 }
@@ -325,7 +325,7 @@ public class SimpleAgentOrchestrator {
 
                 // Step 2: 自动执行验证管道（带修复循环）
                 // 切换到验证阶段工具集
-                if (phaseManager.isEnablePhaseSwitching()) {
+                if (phaseManager.isIterativeMode()) {
                     phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
                     log.debug("🔧 Switched to VERIFICATION phase ({} tools)", toolRegistry.size());
                 }
@@ -344,7 +344,7 @@ public class SimpleAgentOrchestrator {
                     }
 
                     // 验证失败，切换到修复阶段，调用 LLM 修复
-                    if (phaseManager.isEnablePhaseSwitching()) {
+                    if (phaseManager.isIterativeMode()) {
                         phaseManager.switchToPhase(WorkflowPhase.REPAIR, toolRegistry);
                         log.debug("🔧 Switched to REPAIR phase ({} tools)", toolRegistry.size());
                     }
