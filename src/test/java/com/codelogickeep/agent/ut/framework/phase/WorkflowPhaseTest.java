@@ -47,25 +47,25 @@ class WorkflowPhaseTest {
     @Test
     void testGenerationPhaseToolNames() {
         List<String> tools = WorkflowPhase.GENERATION.getToolNames();
-        assertEquals(4, tools.size());
+        assertEquals(5, tools.size());
         
         // 核心工具
         assertTrue(tools.contains("FileSystemTool"), "GENERATION needs FileSystemTool for writeFile");
         assertTrue(tools.contains("CodeAnalyzerTool"), "GENERATION needs CodeAnalyzerTool to analyze source");
         assertTrue(tools.contains("KnowledgeBaseTool"), "GENERATION needs KnowledgeBaseTool for RAG");
         assertTrue(tools.contains("BoundaryAnalyzerTool"), "GENERATION needs BoundaryAnalyzerTool for edge cases");
+        assertTrue(tools.contains("SyntaxCheckerTool"), "GENERATION needs SyntaxCheckerTool to check syntax after write");
     }
     
     @Test
-    void testGenerationPhaseDoesNotContainVerificationTools() {
-        // 验证工具不应该在生成阶段，因为验证由管道自动执行
+    void testGenerationPhaseDoesNotContainHeavyVerificationTools() {
+        // 重型验证工具不应该在生成阶段，但语法检查需要
         List<String> tools = WorkflowPhase.GENERATION.getToolNames();
-        assertFalse(tools.contains("SyntaxCheckerTool"), 
-                "GENERATION should NOT contain SyntaxCheckerTool - verification is automatic");
+        // SyntaxCheckerTool 现在包含在 GENERATION 阶段
         assertFalse(tools.contains("LspSyntaxCheckerTool"), 
-                "GENERATION should NOT contain LspSyntaxCheckerTool - verification is automatic");
+                "GENERATION should NOT contain LspSyntaxCheckerTool - LSP check is automatic");
         assertFalse(tools.contains("MavenExecutorTool"), 
-                "GENERATION should NOT contain MavenExecutorTool - verification is automatic");
+                "GENERATION should NOT contain MavenExecutorTool - compile is automatic");
     }
 
     // ========== VERIFICATION Phase Tests ==========
@@ -99,20 +99,20 @@ class WorkflowPhaseTest {
     @Test
     void testRepairPhaseToolNames() {
         List<String> tools = WorkflowPhase.REPAIR.getToolNames();
-        assertEquals(3, tools.size());
+        assertEquals(4, tools.size());
         
-        // 修复阶段只需要修改代码的工具
+        // 修复阶段需要修改代码和检查语法的工具
         assertTrue(tools.contains("FileSystemTool"), "REPAIR needs FileSystemTool for searchReplace");
         assertTrue(tools.contains("CodeAnalyzerTool"), "REPAIR needs CodeAnalyzerTool to understand code");
         assertTrue(tools.contains("TestReportTool"), "REPAIR needs TestReportTool to understand failures");
+        assertTrue(tools.contains("SyntaxCheckerTool"), "REPAIR needs SyntaxCheckerTool to check syntax after fix");
     }
     
     @Test
-    void testRepairPhaseDoesNotContainVerificationTools() {
-        // 修复后验证由管道执行，不需要验证工具
+    void testRepairPhaseDoesNotContainHeavyVerificationTools() {
+        // 重型验证工具不需要，但语法检查需要
         List<String> tools = WorkflowPhase.REPAIR.getToolNames();
-        assertFalse(tools.contains("SyntaxCheckerTool"), 
-                "REPAIR should NOT contain SyntaxCheckerTool - re-verification is automatic");
+        // SyntaxCheckerTool 现在包含在 REPAIR 阶段
         assertFalse(tools.contains("MavenExecutorTool"), 
                 "REPAIR should NOT contain MavenExecutorTool - re-verification is automatic");
         assertFalse(tools.contains("CoverageTool"), 

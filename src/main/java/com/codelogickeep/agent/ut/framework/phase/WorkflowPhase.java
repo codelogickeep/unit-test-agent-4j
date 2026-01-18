@@ -43,14 +43,14 @@ public enum WorkflowPhase {
      * - 写入新测试代码 (FileSystemTool)
      * - 分析代码逻辑 (CodeAnalyzerTool)
      * - RAG 知识检索 (KnowledgeBaseTool)
-     * 
-     * 注意：不包含验证工具，验证由 VerificationPipeline 自动执行
+     * - 语法检查 (SyntaxCheckerTool) - 写入后检查语法
      */
     GENERATION(Arrays.asList(
         "FileSystemTool",         // readFile, writeFile, writeFileFromLine
         "CodeAnalyzerTool",       // 分析源代码逻辑
         "KnowledgeBaseTool",      // RAG 检索测试模式
-        "BoundaryAnalyzerTool"    // 边界条件建议
+        "BoundaryAnalyzerTool",   // 边界条件建议
+        "SyntaxCheckerTool"       // checkSyntax - 生成后检查语法
     )),
 
     /**
@@ -79,13 +79,13 @@ public enum WorkflowPhase {
      * - 修改代码修复错误 (FileSystemTool)
      * - 分析代码结构 (CodeAnalyzerTool)
      * - 理解测试失败原因 (TestReportTool)
-     * 
-     * 注意：不包含验证工具，修复后由管道重新验证
+     * - 语法检查 (SyntaxCheckerTool) - 修复后检查语法
      */
     REPAIR(Arrays.asList(
         "FileSystemTool",         // readFile, searchReplace, writeFile
         "CodeAnalyzerTool",       // 分析代码帮助理解问题
-        "TestReportTool"          // 理解测试失败的详细原因
+        "TestReportTool",         // 理解测试失败的详细原因
+        "SyntaxCheckerTool"       // checkSyntax - 修复后检查语法
     )),
 
     /**

@@ -36,7 +36,7 @@ public class MavenExecutorTool implements AgentTool {
     }
 
     public record ExecutionResult(int exitCode, String stdOut, String stdErr) {
-        //java.lang.ProcessBuilder
+        // java.lang.ProcessBuilder
     }
 
     private String getShell() {
@@ -51,7 +51,7 @@ public class MavenExecutorTool implements AgentTool {
         }
 
         // Try pwsh first (PowerShell 7)
-        String[] psCommands = {"pwsh", "pwsh.exe"};
+        String[] psCommands = { "pwsh", "pwsh.exe" };
         for (String cmd : psCommands) {
             try {
                 Process p = new ProcessBuilder(cmd, "-Command", "$PSVersionTable.PSVersion.Major").start();
@@ -82,11 +82,10 @@ public class MavenExecutorTool implements AgentTool {
         return cachedShell;
     }
 
-
     @Tool("Compile the project (src and test) using Maven. IMPORTANT: Must run checkSyntax() first and ensure it passes before calling this.")
     public ExecutionResult compileProject() throws IOException, InterruptedException {
         log.info("Tool Input - compileProject");
-        
+
         // 检查编译守卫
         CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
         if (!checkResult.canCompile()) {
@@ -94,7 +93,7 @@ public class MavenExecutorTool implements AgentTool {
             // 返回一个特殊的错误结果，而不是抛出异常
             return new ExecutionResult(-1, "", checkResult.blockReason());
         }
-        
+
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {
@@ -126,7 +125,8 @@ public class MavenExecutorTool implements AgentTool {
         StringBuilder errBuilder = new StringBuilder();
 
         Thread outThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     System.out.println(line);
@@ -138,7 +138,8 @@ public class MavenExecutorTool implements AgentTool {
         });
 
         Thread errThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     System.err.println(line);
@@ -166,16 +167,18 @@ public class MavenExecutorTool implements AgentTool {
     }
 
     @Tool("Execute Maven tests for a specific class. Returns exit code and output.")
-    public ExecutionResult executeTest(@P("The full name of the test class to execute (e.g., com.example.MyTest)") String testClassName) throws IOException, InterruptedException {
+    public ExecutionResult executeTest(
+            @P("The full name of the test class to execute (e.g., com.example.MyTest)") String testClassName)
+            throws IOException, InterruptedException {
         log.info("Tool Input - executeTest: testClassName={}", testClassName);
-        
+
         // 检查编译守卫 - Maven test 会先执行 test-compile
         CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
         if (!checkResult.canCompile()) {
             log.warn("Test blocked by CompileGuard: {}", checkResult.blockReason());
             return new ExecutionResult(-1, "", checkResult.blockReason());
         }
-        
+
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {
@@ -188,7 +191,7 @@ public class MavenExecutorTool implements AgentTool {
         }
 
         command.add("test");
-        command.add("jacoco:report");  // 生成覆盖率报告
+        command.add("jacoco:report"); // 生成覆盖率报告
         // Quote the test class name to prevent PowerShell from misinterpreting dots
         String shell = isWindows ? getShell() : null;
         if (shell != null && (shell.contains("powershell") || shell.contains("pwsh"))) {
@@ -202,18 +205,18 @@ public class MavenExecutorTool implements AgentTool {
         log.info("Tool Output - executeTest: exitCode={}", result.exitCode());
         return result;
     }
-    
+
     @Tool("Clean and run all tests to generate fresh coverage data. Use this before analyzing coverage.")
     public ExecutionResult cleanAndTest() throws IOException, InterruptedException {
         log.info("Tool Input - cleanAndTest");
-        
+
         // 检查编译守卫 - Maven test 会先执行 test-compile
         CompileGuard.CompileCheckResult checkResult = CompileGuard.getInstance().canCompile();
         if (!checkResult.canCompile()) {
             log.warn("Clean and test blocked by CompileGuard: {}", checkResult.blockReason());
             return new ExecutionResult(-1, "", checkResult.blockReason());
         }
-        
+
         List<String> command = new ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {
@@ -228,8 +231,8 @@ public class MavenExecutorTool implements AgentTool {
         // Clean and test to generate fresh coverage data
         command.add("clean");
         command.add("test");
-        command.add("jacoco:report");  // 生成覆盖率报告
-        command.add("-B");
+        command.add("jacoco:report"); // 生成覆盖率报告
+        command.add("-B"); 
 
         ExecutionResult result = executeCommand(command);
         log.info("Tool Output - cleanAndTest: exitCode={}", result.exitCode());

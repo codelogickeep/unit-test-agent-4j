@@ -124,8 +124,9 @@ public class VerificationPipeline {
             Map<String, Object> args = new HashMap<>();
             args.put("path", testFilePath);
             
+            log.info("📝 checkSyntax 输入: path={}", testFilePath);
             String result = toolRegistry.invoke("checkSyntax", args);
-            log.debug("checkSyntax result: {}", result);
+            log.info("📝 checkSyntax 输出: {}", truncateForLog(result));
             
             if (result == null) {
                 return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, "工具返回 null");
@@ -154,8 +155,9 @@ public class VerificationPipeline {
             Map<String, Object> args = new HashMap<>();
             args.put("path", testFilePath);
             
+            log.info("🔍 checkSyntaxWithLsp 输入: path={}", testFilePath);
             String result = toolRegistry.invoke("checkSyntaxWithLsp", args);
-            log.debug("checkSyntaxWithLsp result: {}", result);
+            log.info("🔍 checkSyntaxWithLsp 输出: {}", truncateForLog(result));
             
             if (result == null) {
                 return VerificationResult.failure(VerificationStep.LSP_CHECK, "工具返回 null");
@@ -186,8 +188,9 @@ public class VerificationPipeline {
         try {
             Map<String, Object> args = new HashMap<>();
             
+            log.info("🔨 compileProject 输入: (无参数)");
             String result = toolRegistry.invoke("compileProject", args);
-            log.debug("compileProject result length: {}", result != null ? result.length() : 0);
+            log.info("🔨 compileProject 输出: {}", truncateForLog(result));
             
             if (result == null) {
                 return VerificationResult.failure(VerificationStep.COMPILE, "工具返回 null");
@@ -333,5 +336,18 @@ public class VerificationPipeline {
      */
     public VerificationResult testOnly(String testClassName) {
         return runTest(testClassName);
+    }
+    
+    /**
+     * 截断日志输出，避免过长
+     */
+    private String truncateForLog(String text) {
+        if (text == null) {
+            return "null";
+        }
+        if (text.length() <= 200) {
+            return text.replace("\n", " ");
+        }
+        return text.substring(0, 200).replace("\n", " ") + "... (truncated, total: " + text.length() + " chars)";
     }
 }
