@@ -214,6 +214,13 @@ public class AgentExecutor {
                 // 记录响应
                 contextManager.addAssistantMessage(responseContent, toolCalls.isEmpty() ? null : toolCalls);
                 
+                // 统计 Token（估算）
+                if (tokenStatsCallback != null) {
+                    int estimatedPromptTokens = estimateTokens(contextManager.getMessages());
+                    int estimatedResponseTokens = responseContent != null ? responseContent.length() / 4 : 0;
+                    tokenStatsCallback.accept(estimatedPromptTokens, estimatedResponseTokens);
+                }
+                
                 // 检查是否需要工具调用
                 if (toolCalls.isEmpty()) {
                     handler.onComplete(responseContent, null);
