@@ -142,8 +142,12 @@ public class PreCheckExecutor {
 
     private String calculateTestFilePath(String targetFile) {
         // 处理带前导斜杠和不带前导斜杠的路径
-        String testPath = targetFile.replace("/src/main/java/", "/src/test/java/")
-                .replace("src/main/java/", "src/test/java/");
+        String testPath = targetFile;
+        if (testPath.contains("/src/main/java/")) {
+            testPath = testPath.replace("/src/main/java/", "/src/test/java/");
+        } else if (testPath.contains("src/main/java/")) {
+            testPath = testPath.replace("src/main/java/", "src/test/java/");
+        }
         return testPath.replace(".java", "Test.java");
     }
 
