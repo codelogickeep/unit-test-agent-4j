@@ -21,15 +21,18 @@ public enum WorkflowPhase {
      * - 初始化方法迭代 (MethodIteratorTool) ← 关键！
      * - 分析边界条件 (BoundaryAnalyzerTool)
      * - 发现现有测试 (TestDiscoveryTool)
+     * - 运行测试获取覆盖率 (MavenExecutorTool, CoverageTool) ← PreCheckExecutor 需要
      */
     ANALYSIS(Arrays.asList(
         "CodeAnalyzerTool",       // getPriorityMethods, analyzeClass
         "FileSystemTool",         // readFile, writeFile
         "DirectoryTool",          // directoryExists, fileExists
-        "MethodIteratorTool",     // initMethodIteration, getNextMethod ← 新增！
+        "MethodIteratorTool",     // initMethodIteration, getNextMethod
         "BoundaryAnalyzerTool",   // 边界值分析
         "TestDiscoveryTool",      // 发现现有测试
-        "ProjectScannerTool"      // 项目结构扫描
+        "ProjectScannerTool",     // 项目结构扫描
+        "MavenExecutorTool",      // cleanAndTest（PreCheckExecutor 需要）
+        "CoverageTool"            // getMethodCoverageDetails, getUncoveredMethods
     )),
 
     /**

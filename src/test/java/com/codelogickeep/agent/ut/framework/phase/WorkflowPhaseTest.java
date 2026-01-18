@@ -13,7 +13,7 @@ class WorkflowPhaseTest {
     @Test
     void testAnalysisPhaseToolNames() {
         List<String> tools = WorkflowPhase.ANALYSIS.getToolNames();
-        assertEquals(7, tools.size());
+        assertEquals(9, tools.size());
         
         // 核心工具
         assertTrue(tools.contains("CodeAnalyzerTool"), "ANALYSIS needs CodeAnalyzerTool for getPriorityMethods");
@@ -28,6 +28,10 @@ class WorkflowPhaseTest {
         assertTrue(tools.contains("BoundaryAnalyzerTool"));
         assertTrue(tools.contains("TestDiscoveryTool"));
         assertTrue(tools.contains("ProjectScannerTool"));
+        
+        // PreCheckExecutor 需要的工具
+        assertTrue(tools.contains("MavenExecutorTool"), "ANALYSIS needs MavenExecutorTool for cleanAndTest");
+        assertTrue(tools.contains("CoverageTool"), "ANALYSIS needs CoverageTool for getMethodCoverageDetails");
     }
     
     @Test
