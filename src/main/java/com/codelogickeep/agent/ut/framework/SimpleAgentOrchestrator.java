@@ -11,15 +11,13 @@ import com.codelogickeep.agent.ut.framework.model.IterationStats;
 import com.codelogickeep.agent.ut.framework.phase.PhaseManager;
 import com.codelogickeep.agent.ut.framework.precheck.PreCheckExecutor;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
+import com.codelogickeep.agent.ut.framework.util.ClassNameExtractor;
 import com.codelogickeep.agent.ut.framework.util.PromptTemplateLoader;
 import com.codelogickeep.agent.ut.model.PreCheckResult;
 import com.codelogickeep.agent.ut.model.MethodCoverageInfo;
 import com.codelogickeep.agent.ut.tools.BoundaryAnalyzerTool;
 import com.codelogickeep.agent.ut.tools.CoverageTool;
 import com.codelogickeep.agent.ut.tools.MutationTestTool;
-import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -821,6 +819,11 @@ public class SimpleAgentOrchestrator {
 
         message.append("Target file: ").append(targetFile);
 
+        // 添加明确的测试文件路径指导
+        String testFilePath = calculateTestFilePath(targetFile);
+        message.append("\nTest file path: ").append(testFilePath);
+        message.append("\n\n⚠️ CRITICAL: You MUST write the test file to the exact path above (").append(testFilePath).append(").");
+
         // 添加预检查结果信息
         if (currentPreCheck != null) {
             if (currentPreCheck.isHasExistingTests()) {
@@ -1038,70 +1041,20 @@ public class SimpleAgentOrchestrator {
      * 提取全限定类名
      */
     private String extractClassName(String sourceFile) {
-        // 1. 尝试从路径解析 (快速路径)
-        String normalized = sourceFile.replace("\\", "/");
-        int srcMainIndex = normalized.indexOf("/src/main/java/");
-        if (srcMainIndex >= 0) {
-            String className = normalized.substring(srcMainIndex + "/src/main/java/".length());
-            className = className.replace("/", ".").replace(".java", "");
-            return className;
+        return ClassNameExtractor.extractClassName(sourceFile);
+    }
+
+    /**
+     * 计算测试文件路径
+     */
+    private String calculateTestFilePath(String targetFile) {
+        // 处理带前导斜杠和不带前导斜杠的路径
+        String testPath = targetFile;
+        if (testPath.contains("/src/main/java/")) {
+            testPath = testPath.replace("/src/main/java/", "/src/test/java/");
+        } else if (testPath.contains("src/main/java/")) {
+            testPath = testPath.replace("src/main/java/", "src/test/java/");
         }
-
-        // 2. 尝试解析文件内容 (回退机制)
-        try {
-            Path path = Paths.get(sourceFile);
-            if (Files.exists(path)) {
-                CompilationUnit cu = StaticJavaParser.parse(path);
-
-                // 获取包名
-                String packageName = cu.getPackageDeclaration()
-                        .map(pd -> pd.getNameAsString())
-                        .orElse("");
-
-                // 获取主类名
-                String simpleClassName = null;
-                List<TypeDeclaration<?>> types = cu.getTypes();
-
-                if (types.isEmpty()) {
-                    log.warn("No types found in file: {}", sourceFile);
-                    return null;
-                }
-
-                // 策略1: 优先查找 public 类
-                for (TypeDeclaration<?> type : types) {
-                    if (type.isPublic()) {
-                        simpleClassName = type.getNameAsString();
-                        break;
-                    }
-                }
-
-                // 策略2: 查找与文件名匹配的类 (如果是相对路径，取文件名)
-                if (simpleClassName == null) {
-                    String fileName = path.getFileName().toString().replace(".java", "");
-                    for (TypeDeclaration<?> type : types) {
-                        if (type.getNameAsString().equals(fileName)) {
-                            simpleClassName = type.getNameAsString();
-                            break;
-                        }
-                    }
-                }
-
-                // 策略3: 取第一个类
-                if (simpleClassName == null) {
-                    simpleClassName = types.get(0).getNameAsString();
-                    log.info("Using first found type '{}' as main class for {}", simpleClassName, sourceFile);
-                }
-
-                if (!packageName.isEmpty()) {
-                    return packageName + "." + simpleClassName;
-                } else {
-                    return simpleClassName;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to parse source file to extract class name: {}", e.getMessage());
-        }
-
-        return null;
+        return testPath.replace(".java", "Test.java");
     }
 }

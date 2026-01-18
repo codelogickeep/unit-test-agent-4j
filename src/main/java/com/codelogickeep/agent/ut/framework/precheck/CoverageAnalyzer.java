@@ -2,11 +2,11 @@ package com.codelogickeep.agent.ut.framework.precheck;
 
 import com.codelogickeep.agent.ut.config.AppConfig;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
+import com.codelogickeep.agent.ut.framework.util.ClassNameExtractor;
 import com.codelogickeep.agent.ut.model.MethodCoverageInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -145,8 +145,7 @@ public class CoverageAnalyzer {
     }
 
     private String extractClassName(String targetFile) {
-        String fileName = Paths.get(targetFile).getFileName().toString();
-        return fileName.replace(".java", "");
+        return ClassNameExtractor.extractClassName(targetFile);
     }
 
     /**
