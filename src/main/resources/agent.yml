@@ -8,7 +8,7 @@ llm:
   api-key: "${env:UT_AGENT_API_KEY}"       # API Key (supports env var)
   base-url: "${env:UT_AGENT_BASE_URL}"     # Base URL (auto handles /v1 suffix)
   model-name: "${env:UT_AGENT_MODEL_NAME}" # Model name
-  temperature: 0.0                        # 0.0 (precise) ~ 1.0 (creative)
+  temperature: 0.3                         # 0.0 (precise) ~ 1.0 (creative)
   timeout: 120                            # Request timeout in seconds
   custom-headers: {}                       # Custom HTTP headers (optional)
     # X-Custom-Header: "value"
@@ -18,8 +18,8 @@ workflow:
   max-retries: 5                           # Max retry attempts on failure
   coverage-threshold: 80                   # Coverage threshold (%)
   interactive: false                      # Interactive confirmation mode
-  use-lsp: false                          # Use LSP for syntax check (auto-downloads JDT LS)
-  iterative-mode: false                   # Enable iterative method testing mode
+  use-lsp: true                          # Use LSP for syntax check (auto-downloads JDT LS)
+  iterative-mode: true                   # Enable iterative method testing mode
   method-coverage-threshold: 80           # Per-method coverage threshold (%)
   skip-low-priority: false                # Skip low-priority methods (P2) in iterative mode
   max-stale-iterations: 3                 # Stop after N iterations without progress
@@ -27,8 +27,7 @@ workflow:
 
 # Batch Mode Settings (for --project)
 batch:
-  exclude-patterns: ""                     # Glob patterns to exclude (comma-separated)
-    # Example: "**/dto/**,**/vo/**,**/domain/**"
+  exclude-patterns: "**/dto/**,**/vo/**,**/entity/**"             # Glob patterns to exclude (comma-separated)
   dry-run: false                           # Analyze only, no generation
 
 # Incremental Mode Settings (for --incremental)

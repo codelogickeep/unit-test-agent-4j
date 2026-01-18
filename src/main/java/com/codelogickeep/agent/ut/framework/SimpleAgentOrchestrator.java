@@ -305,7 +305,7 @@ public class SimpleAgentOrchestrator {
                 // 切换到生成阶段工具集
                 if (phaseManager.isIterativeMode()) {
                     phaseManager.switchToPhase(WorkflowPhase.GENERATION, toolRegistry);
-                    log.debug("🔧 Switched to GENERATION phase ({} tools)", toolRegistry.size());
+                    log.info("🔧 Switched to GENERATION phase ({} tools)", toolRegistry.size());
                 }
 
                 log.info("🤖 Step 1: Generating tests for method {}", methodInfo.getMethodName());
@@ -327,7 +327,7 @@ public class SimpleAgentOrchestrator {
                 // 切换到验证阶段工具集
                 if (phaseManager.isIterativeMode()) {
                     phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
-                    log.debug("🔧 Switched to VERIFICATION phase ({} tools)", toolRegistry.size());
+                    log.info("🔧 Switched to VERIFICATION phase ({} tools)", toolRegistry.size());
                 }
 
                 log.info("🔄 Step 2: Running verification pipeline");
@@ -346,7 +346,7 @@ public class SimpleAgentOrchestrator {
                     // 验证失败，切换到修复阶段，调用 LLM 修复
                     if (phaseManager.isIterativeMode()) {
                         phaseManager.switchToPhase(WorkflowPhase.REPAIR, toolRegistry);
-                        log.debug("🔧 Switched to REPAIR phase ({} tools)", toolRegistry.size());
+                        log.info("🔧 Switched to REPAIR phase ({} tools)", toolRegistry.size());
                     }
 
                     log.warn("⚠️ Verification failed at step: {}", verifyResult.getFailedStep());
@@ -361,6 +361,12 @@ public class SimpleAgentOrchestrator {
                     verificationRetryCount++;
                     log.info("🔄 Retrying verification (attempt {}/{})",
                             verificationRetryCount + 1, maxVerificationRetries);
+                    
+                    // 切回验证阶段工具集（从 REPAIR 切回）
+                    if (phaseManager.isIterativeMode()) {
+                        phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
+                        log.info("🔧 Switched back to VERIFICATION phase ({} tools)", toolRegistry.size());
+                    }
                 }
 
                 // 检查验证结果
