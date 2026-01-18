@@ -359,13 +359,17 @@ public class SimpleAgentOrchestrator {
                     }
 
                     verificationRetryCount++;
-                    log.info("🔄 Retrying verification (attempt {}/{})",
-                            verificationRetryCount + 1, maxVerificationRetries);
                     
-                    // 切回验证阶段工具集（从 REPAIR 切回）
-                    if (phaseManager.isIterativeMode()) {
-                        phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
-                        log.info("🔧 Switched back to VERIFICATION phase ({} tools)", toolRegistry.size());
+                    // 检查是否还有重试机会，如果有则切回验证阶段
+                    if (verificationRetryCount < maxVerificationRetries) {
+                        log.info("🔄 Retrying verification (attempt {}/{})",
+                                verificationRetryCount + 1, maxVerificationRetries);
+                        
+                        // 切回验证阶段工具集（从 REPAIR 切回）
+                        if (phaseManager.isIterativeMode()) {
+                            phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
+                            log.info("🔧 Switched back to VERIFICATION phase ({} tools)", toolRegistry.size());
+                        }
                     }
                 }
 
