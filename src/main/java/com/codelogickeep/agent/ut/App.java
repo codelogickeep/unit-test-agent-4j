@@ -137,10 +137,10 @@ public class App implements Callable<Integer> {
             config.getWorkflow().setInteractive(true);
         }
 
-        // Apply Defaults if still null
+        // Apply Defaults if still null (must match agent.yml defaults)
         boolean needsSave = false;
         if (config.getLlm().getTemperature() == null) {
-            config.getLlm().setTemperature(0.1);
+            config.getLlm().setTemperature(0.3);  // 与 agent.yml 保持一致
             needsSave = true;
         }
         if (config.getWorkflow() == null) {

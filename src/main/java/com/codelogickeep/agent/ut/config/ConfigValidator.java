@@ -13,8 +13,8 @@ import java.util.List;
 public class ConfigValidator {
     private static final Logger log = LoggerFactory.getLogger(ConfigValidator.class);
 
-    // Default values
-    private static final double DEFAULT_TEMPERATURE = 0.0;
+    // Default values (must match agent.yml)
+    private static final double DEFAULT_TEMPERATURE = 0.3;
     private static final long DEFAULT_TIMEOUT = 120L;
     private static final int DEFAULT_MAX_RETRIES = 3;
     private static final int DEFAULT_COVERAGE_THRESHOLD = 80;
