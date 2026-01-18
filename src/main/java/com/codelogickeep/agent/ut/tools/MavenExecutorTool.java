@@ -188,6 +188,7 @@ public class MavenExecutorTool implements AgentTool {
         }
 
         command.add("test");
+        command.add("jacoco:report");  // 生成覆盖率报告
         // Quote the test class name to prevent PowerShell from misinterpreting dots
         String shell = isWindows ? getShell() : null;
         if (shell != null && (shell.contains("powershell") || shell.contains("pwsh"))) {
@@ -227,6 +228,7 @@ public class MavenExecutorTool implements AgentTool {
         // Clean and test to generate fresh coverage data
         command.add("clean");
         command.add("test");
+        command.add("jacoco:report");  // 生成覆盖率报告
         command.add("-B");
 
         ExecutionResult result = executeCommand(command);
