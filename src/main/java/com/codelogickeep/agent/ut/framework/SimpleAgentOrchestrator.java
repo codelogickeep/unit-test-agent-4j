@@ -246,7 +246,7 @@ public class SimpleAgentOrchestrator {
 
         // ===== Phase 1: 初始化（创建测试文件骨架）=====
         log.info(">>> Phase 1: Initialization");
-        
+
         // 切换到分析阶段工具集
         if (phaseManager.isEnablePhaseSwitching()) {
             phaseManager.switchToPhase(WorkflowPhase.ANALYSIS, toolRegistry);
@@ -307,7 +307,7 @@ public class SimpleAgentOrchestrator {
                     phaseManager.switchToPhase(WorkflowPhase.GENERATION, toolRegistry);
                     log.debug("🔧 Switched to GENERATION phase ({} tools)", toolRegistry.size());
                 }
-                
+
                 log.info("🤖 Step 1: Generating tests for method {}", methodInfo.getMethodName());
                 String generatePrompt = coverageRetryCount == 0
                         ? FixPromptBuilder.buildGenerateTestPrompt(targetFile, methodInfo.getMethodName(),
@@ -329,7 +329,7 @@ public class SimpleAgentOrchestrator {
                     phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
                     log.debug("🔧 Switched to VERIFICATION phase ({} tools)", toolRegistry.size());
                 }
-                
+
                 log.info("🔄 Step 2: Running verification pipeline");
                 int verificationRetryCount = 0;
                 VerificationResult verifyResult = null;
@@ -348,7 +348,7 @@ public class SimpleAgentOrchestrator {
                         phaseManager.switchToPhase(WorkflowPhase.REPAIR, toolRegistry);
                         log.debug("🔧 Switched to REPAIR phase ({} tools)", toolRegistry.size());
                     }
-                    
+
                     log.warn("⚠️ Verification failed at step: {}", verifyResult.getFailedStep());
                     String fixPrompt = buildFixPromptForStep(verifyResult, testFilePath, testClassName);
 

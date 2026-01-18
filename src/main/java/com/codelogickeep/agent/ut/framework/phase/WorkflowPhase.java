@@ -5,57 +5,84 @@ import java.util.List;
 
 /**
  * 工作流阶段枚举，定义测试生成的不同阶段及其对应的工具集
+ * 
+ * 设计原则：
+ * - 每个阶段只加载 LLM 需要的工具
+ * - 验证阶段由 VerificationPipeline 自动执行，工具供管道使用
+ * - 修复阶段 LLM 只需修改代码，验证由管道重新执行
  */
 public enum WorkflowPhase {
     /**
-     * 分析阶段 - 分析源代码结构、边界条件、现有测试风格
+     * 分析阶段 - 分析源代码结构、初始化迭代、创建测试骨架
+     * 
+     * 用途：
+     * - 读取源文件分析结构 (FileSystemTool, CodeAnalyzerTool)
+     * - 检查目录和文件存在性 (DirectoryTool)
+     * - 初始化方法迭代 (MethodIteratorTool) ← 关键！
+     * - 分析边界条件 (BoundaryAnalyzerTool)
+     * - 发现现有测试 (TestDiscoveryTool)
      */
     ANALYSIS(Arrays.asList(
-        "CodeAnalyzerTool",
-        "FileSystemTool",
-        "DirectoryTool",
-        "BoundaryAnalyzerTool",
-        "StyleAnalyzerTool",
-        "ProjectScannerTool",
-        "TestDiscoveryTool"
+        "CodeAnalyzerTool",       // getPriorityMethods, analyzeClass
+        "FileSystemTool",         // readFile, writeFile
+        "DirectoryTool",          // directoryExists, fileExists
+        "MethodIteratorTool",     // initMethodIteration, getNextMethod ← 新增！
+        "BoundaryAnalyzerTool",   // 边界值分析
+        "TestDiscoveryTool",      // 发现现有测试
+        "ProjectScannerTool"      // 项目结构扫描
     )),
 
     /**
-     * 生成阶段 - 生成测试代码
+     * 生成阶段 - LLM 生成测试代码
+     * 
+     * 用途：
+     * - 读取源文件和现有测试 (FileSystemTool)
+     * - 写入新测试代码 (FileSystemTool)
+     * - 分析代码逻辑 (CodeAnalyzerTool)
+     * - RAG 知识检索 (KnowledgeBaseTool)
+     * 
+     * 注意：不包含验证工具，验证由 VerificationPipeline 自动执行
      */
     GENERATION(Arrays.asList(
-        "FileSystemTool",
-        "DirectoryTool",
-        "KnowledgeBaseTool",
-        "SyntaxCheckerTool",
-        "LspSyntaxCheckerTool",
-        "CodeAnalyzerTool"
+        "FileSystemTool",         // readFile, writeFile, writeFileFromLine
+        "CodeAnalyzerTool",       // 分析源代码逻辑
+        "KnowledgeBaseTool",      // RAG 检索测试模式
+        "BoundaryAnalyzerTool"    // 边界条件建议
     )),
 
     /**
      * 验证阶段 - 编译、运行测试、检查覆盖率
+     * 
+     * 用途：由 VerificationPipeline 自动调用
+     * - 语法检查 (SyntaxCheckerTool, LspSyntaxCheckerTool)
+     * - 编译测试 (MavenExecutorTool)
+     * - 执行测试 (MavenExecutorTool)
+     * - 获取覆盖率 (CoverageTool)
      */
     VERIFICATION(Arrays.asList(
-        "MavenExecutorTool",
-        "SyntaxCheckerTool",
-        "LspSyntaxCheckerTool",
-        "TestReportTool",
-        "CoverageTool",
-        "FileSystemTool",
-        "MutationTestTool"
+        "SyntaxCheckerTool",      // checkSyntax
+        "LspSyntaxCheckerTool",   // checkSyntaxWithLsp
+        "MavenExecutorTool",      // compileProject, executeTest
+        "CoverageTool",           // getSingleMethodCoverage
+        "TestReportTool",         // 解析测试报告（可选）
+        "FileSystemTool"          // 读取报告文件
     )),
 
     /**
-     * 修复阶段 - 根据测试失败原因修复测试代码
+     * 修复阶段 - LLM 修复测试失败
+     * 
+     * 用途：
+     * - 读取测试文件和源文件 (FileSystemTool)
+     * - 修改代码修复错误 (FileSystemTool)
+     * - 分析代码结构 (CodeAnalyzerTool)
+     * - 理解测试失败原因 (TestReportTool)
+     * 
+     * 注意：不包含验证工具，修复后由管道重新验证
      */
     REPAIR(Arrays.asList(
-        "FileSystemTool",
-        "TestReportTool",
-        "CodeAnalyzerTool",
-        "SyntaxCheckerTool",
-        "LspSyntaxCheckerTool",
-        "MavenExecutorTool",
-        "CoverageTool"
+        "FileSystemTool",         // readFile, searchReplace, writeFile
+        "CodeAnalyzerTool",       // 分析代码帮助理解问题
+        "TestReportTool"          // 理解测试失败的详细原因
     )),
 
     /**
