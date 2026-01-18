@@ -53,97 +53,27 @@ dependencies:
 prompts:
   system: "prompts/system-prompt.st"      # System prompt template path
 
-# MCP Configuration (Model Context Protocol)
-mcp:
-  servers: []                             # MCP server configurations
-    # - name: "server-name"
-    #   url: "http://localhost:8080"
+# =============================================================================
+# Phase Switching (Dynamic Tool Loading)
+# =============================================================================
+# 阶段切换功能已重构，工具集定义移至代码中：
+#   - 位置: src/main/java/.../framework/phase/WorkflowPhase.java
+#   - 启用: workflow.enable-phase-switching=true
+#
+# 各阶段工具集（代码中定义）：
+#   ANALYSIS:     CodeAnalyzerTool, FileSystemTool, DirectoryTool, MethodIteratorTool,
+#                 BoundaryAnalyzerTool, TestDiscoveryTool, ProjectScannerTool (7)
+#   GENERATION:   FileSystemTool, CodeAnalyzerTool, KnowledgeBaseTool, BoundaryAnalyzerTool (4)
+#   VERIFICATION: SyntaxCheckerTool, LspSyntaxCheckerTool, MavenExecutorTool, 
+#                 CoverageTool, TestReportTool, FileSystemTool (6)
+#   REPAIR:       FileSystemTool, CodeAnalyzerTool, TestReportTool (3)
+#
+# 注意: 下面的 skills 和 mcp 配置已废弃，保留仅供参考
+# =============================================================================
 
-# Skills Configuration - 工作流阶段文档参考
-# 以下配置描述了完整单测生成流程中各阶段使用的工具
-# 实际运行时始终加载所有工具，LLM 根据当前任务自主选择
-# 完整流程: 分析(analysis) → 生成(generation) → 验证(verification) → 修复(repair)
-# Note: LspSyntaxCheckerTool 仅在 use-lsp=true 时加载
-skills:
-  # Analysis phase - read and understand source code
-  - name: "analysis"
-    description: "Code analysis phase - read and understand source code"
-    tools:
-      - CodeAnalyzerTool
-      - FileSystemTool
-      - DirectoryTool           # 环境准备需要
-      - BoundaryAnalyzerTool
-      - StyleAnalyzerTool
-      - ProjectScannerTool
-      - TestDiscoveryTool
+# [DEPRECATED] MCP Configuration - 未实现，保留供未来扩展
+# mcp:
+#   servers: []
 
-  # Generation phase - generate and write test code
-  - name: "generation"
-    description: "Test generation phase - generate and write test files"
-    tools:
-      - FileSystemTool
-      - DirectoryTool
-      - KnowledgeBaseTool
-      - SyntaxCheckerTool       # CompileGuard 强制要求
-      - LspSyntaxCheckerTool    # LSP 模式语义检查
-      - CodeAnalyzerTool
-
-  # Verification phase - run tests and check coverage
-  - name: "verification"
-    description: "Test verification phase - execute tests and check coverage"
-    tools:
-      - MavenExecutorTool
-      - SyntaxCheckerTool       # CompileGuard 强制要求
-      - LspSyntaxCheckerTool    # LSP 模式语义检查
-      - TestReportTool
-      - CoverageTool
-      - FileSystemTool
-      - MutationTestTool
-
-  # Repair phase - fix failing tests
-  - name: "repair"
-    description: "Repair phase - fix test failures based on error reports"
-    tools:
-      - FileSystemTool
-      - TestReportTool
-      - CodeAnalyzerTool
-      - SyntaxCheckerTool       # CompileGuard 强制要求
-      - LspSyntaxCheckerTool    # LSP 模式语义检查
-      - MavenExecutorTool
-      - CoverageTool            # 修复后验证覆盖率
-
-  # Iterative mode - per-method test generation (complete workflow)
-  - name: "iterative"
-    description: "Iterative mode - generate tests method by method with priority"
-    tools:
-      - CodeAnalyzerTool
-      - CoverageTool
-      - MethodIteratorTool
-      - FileSystemTool
-      - DirectoryTool
-      - SyntaxCheckerTool       # CompileGuard 强制要求
-      - LspSyntaxCheckerTool    # LSP 模式语义检查
-      - MavenExecutorTool
-      - TestReportTool
-      - KnowledgeBaseTool
-      - BoundaryAnalyzerTool    # 边界测试建议
-
-  # Incremental mode - Git-based change detection
-  - name: "incremental"
-    description: "Incremental mode - only test changed files from Git"
-    tools:
-      - GitDiffTool             # Git 差异分析
-      - CodeAnalyzerTool
-      - FileSystemTool
-      - DirectoryTool
-      - SyntaxCheckerTool
-      - LspSyntaxCheckerTool
-      - MavenExecutorTool
-      - CoverageTool
-      - TestReportTool
-      - KnowledgeBaseTool
-
-  # Full toolset (default) - use all available tools
-  - name: "full"
-    description: "Full toolset - use all available tools"
-    tools: []  # Empty means use all tools
+# [DEPRECATED] Skills Configuration - 已迁移至 WorkflowPhase.java
+# 如需修改阶段工具集，请编辑 WorkflowPhase 枚举

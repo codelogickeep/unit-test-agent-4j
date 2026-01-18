@@ -144,11 +144,17 @@ public class ToolFactory {
 
     /**
      * 根据 skill 配置过滤工具
+     * 
+     * @deprecated 阶段切换已迁移至 {@link com.codelogickeep.agent.ut.framework.phase.WorkflowPhase}，
+     *             不再使用 agent.yml 中的 skills 配置。
+     *             请使用 {@link com.codelogickeep.agent.ut.framework.phase.PhaseManager#switchToPhase}
+     * 
      * @param allTools 所有工具
      * @param appConfig 配置
      * @param skillName skill 名称
      * @return 过滤后的工具列表
      */
+    @Deprecated
     public static List<Object> filterToolsBySkill(List<Object> allTools, AppConfig appConfig, String skillName) {
         if (appConfig.getSkills() == null || appConfig.getSkills().isEmpty()) {
             return allTools;
@@ -211,7 +217,11 @@ public class ToolFactory {
 
     /**
      * 获取所有可用的 skill 名称
+     * 
+     * @deprecated 阶段切换已迁移至 {@link com.codelogickeep.agent.ut.framework.phase.WorkflowPhase}，
+     *             请使用 {@code WorkflowPhase.values()} 获取所有阶段
      */
+    @Deprecated
     public static List<String> getAvailableSkillNames(AppConfig appConfig) {
         if (appConfig.getSkills() == null) {
             return List.of();
