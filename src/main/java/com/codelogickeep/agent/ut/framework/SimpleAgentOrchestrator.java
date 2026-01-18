@@ -8,7 +8,12 @@ import com.codelogickeep.agent.ut.framework.executor.AgentExecutor;
 import com.codelogickeep.agent.ut.framework.executor.AgentResult;
 import com.codelogickeep.agent.ut.framework.executor.ConsoleStreamingHandler;
 import com.codelogickeep.agent.ut.framework.model.IterationStats;
+import com.codelogickeep.agent.ut.framework.phase.PhaseManager;
+import com.codelogickeep.agent.ut.framework.precheck.PreCheckExecutor;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
+import com.codelogickeep.agent.ut.framework.util.PromptTemplateLoader;
+import com.codelogickeep.agent.ut.model.PreCheckResult;
+import com.codelogickeep.agent.ut.model.MethodCoverageInfo;
 import com.codelogickeep.agent.ut.tools.BoundaryAnalyzerTool;
 import com.codelogickeep.agent.ut.tools.CoverageTool;
 import com.codelogickeep.agent.ut.tools.MutationTestTool;
@@ -20,7 +25,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +54,9 @@ public class SimpleAgentOrchestrator {
     private final LlmAdapter llmAdapter;
     private final ToolRegistry toolRegistry;
     private final int maxIterations;
+    private final PhaseManager phaseManager;
+    private final List<Object> allTools;
+    private final PreCheckExecutor preCheckExecutor;
 
     // 迭代统计
     private IterationStats iterationStats;
@@ -59,15 +66,32 @@ public class SimpleAgentOrchestrator {
 
     public SimpleAgentOrchestrator(AppConfig config, List<Object> tools) {
         this.config = config;
+        this.allTools = tools;
         this.llmAdapter = LlmAdapterFactory.create(config.getLlm());
         this.toolRegistry = new ToolRegistry();
-        this.toolRegistry.registerAll(tools);
+
+        // 初始化阶段管理器
+        this.phaseManager = new PhaseManager(config, tools);
+
+        // 根据阶段管理器加载工具
+        if (phaseManager.isEnablePhaseSwitching()) {
+            // 阶段切换模式：只加载当前阶段的工具
+            phaseManager.switchToPhase(phaseManager.getCurrentPhase(), toolRegistry);
+        } else {
+            // 传统模式：加载所有工具
+            this.toolRegistry.registerAll(tools);
+        }
+
         this.maxIterations = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() * 10 : 50;
 
         // 初始化覆盖率反馈引擎
         initFeedbackEngine(tools);
 
-        log.info("SimpleAgentOrchestrator initialized with {} tools", toolRegistry.size());
+        // 初始化 PreCheckExecutor
+        this.preCheckExecutor = new PreCheckExecutor(toolRegistry, config, feedbackEngine);
+
+        log.info("SimpleAgentOrchestrator initialized with {} tools, phase switching: {}",
+                toolRegistry.size(), phaseManager.isEnablePhaseSwitching());
     }
 
     /**
@@ -114,9 +138,9 @@ public class SimpleAgentOrchestrator {
 
         // ===== 预检查阶段：编译和覆盖率分析（所有模式共用）=====
         currentPreCheck = performPreCheck(projectRoot, targetFile);
-        if (!currentPreCheck.success) {
-            log.error("Pre-check failed: {}", currentPreCheck.errorMessage);
-            System.err.println("\n❌ Pre-check failed: " + currentPreCheck.errorMessage);
+        if (!currentPreCheck.isSuccess()) {
+            log.error("Pre-check failed: {}", currentPreCheck.getErrorMessage());
+            System.err.println("\n❌ Pre-check failed: " + currentPreCheck.getErrorMessage());
             System.err.println("Please fix the issues above before running the agent.");
             return;
         }
@@ -202,9 +226,9 @@ public class SimpleAgentOrchestrator {
         log.info("📊 Found {} methods to process (sorted by coverage):", methodsToProcess.size());
         for (MethodCoverageInfo m : methodsToProcess) {
             log.info("   - {} [{}] Line: {}%, Branch: {}%",
-                    m.methodName, m.priority,
-                    String.format("%.1f", m.lineCoverage),
-                    String.format("%.1f", m.branchCoverage));
+                    m.getMethodName(), m.getPriority(),
+                    String.format("%.1f", m.getLineCoverage()),
+                    String.format("%.1f", m.getBranchCoverage()));
         }
 
         // ===== Phase 1: 初始化 =====
@@ -230,24 +254,24 @@ public class SimpleAgentOrchestrator {
 
         for (int i = 0; i < methodsToProcess.size(); i++) {
             MethodCoverageInfo methodInfo = methodsToProcess.get(i);
-            log.info(">>> Phase 2: Method #{} - {} [{}]", i + 1, methodInfo.methodName, methodInfo.priority);
+            log.info(">>> Phase 2: Method #{} - {} [{}]", i + 1, methodInfo.getMethodName(), methodInfo.getPriority());
 
             // 创建方法统计，使用实际方法名和初始覆盖率
             IterationStats.MethodStats currentMethodStats = iterationStats.startMethod(
-                    methodInfo.methodName,
-                    methodInfo.priority,
-                    methodInfo.lineCoverage);
+                    methodInfo.getMethodName(),
+                    methodInfo.getPriority(),
+                    methodInfo.getLineCoverage());
 
             // 检查是否已达到覆盖率要求
-            if (methodInfo.lineCoverage >= coverageThreshold) {
+            if (methodInfo.getLineCoverage() >= coverageThreshold) {
                 log.info("📊 Method {} already has {}% coverage (threshold: {}%)",
-                        methodInfo.methodName, String.format("%.1f", methodInfo.lineCoverage), coverageThreshold);
+                        methodInfo.getMethodName(), String.format("%.1f", methodInfo.getLineCoverage()), coverageThreshold);
 
                 // 覆盖率已达标，直接跳过该方法
-                log.info("✅ Method {} coverage sufficient - SKIPPING", methodInfo.methodName);
-                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.lineCoverage) + "% >= "
+                log.info("✅ Method {} coverage sufficient - SKIPPING", methodInfo.getMethodName());
+                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.getLineCoverage()) + "% >= "
                         + coverageThreshold + "%");
-                currentMethodStats.complete("SKIPPED", methodInfo.lineCoverage);
+                currentMethodStats.complete("SKIPPED", methodInfo.getLineCoverage());
                 skippedCount++;
                 continue;
             }
@@ -265,7 +289,7 @@ public class SimpleAgentOrchestrator {
                     currentMethodStats.addPromptTokens(prompt);
                     currentMethodStats.addResponseTokens(response);
                     log.info("📊 Method {} - Prompt: {} tokens, Response: {} tokens",
-                            methodInfo.methodName, prompt, response);
+                            methodInfo.getMethodName(), prompt, response);
                 });
 
                 // 构建针对特定方法的提示词
@@ -279,7 +303,7 @@ public class SimpleAgentOrchestrator {
                     handler.await(5, TimeUnit.MINUTES);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    currentMethodStats.complete("INTERRUPTED", methodInfo.lineCoverage);
+                    currentMethodStats.complete("INTERRUPTED", methodInfo.getLineCoverage());
                     break;
                 }
 
@@ -289,7 +313,7 @@ public class SimpleAgentOrchestrator {
                 // 检查是否有错误
                 if (handler.getError() != null) {
                     Throwable error = handler.getError();
-                    log.error("❌ LLM call failed for method {}: {}", methodInfo.methodName, error.getMessage());
+                    log.error("❌ LLM call failed for method {}: {}", methodInfo.getMethodName(), error.getMessage());
                     if (error.getCause() != null) {
                         log.error("   Caused by: {}", error.getCause().getMessage());
                     }
@@ -298,8 +322,8 @@ public class SimpleAgentOrchestrator {
                     log.warn("⏳ Retrying... attempt {}/{}", methodRetryCount + 1, maxMethodRetries);
 
                     if (methodRetryCount >= maxMethodRetries) {
-                        log.error("❌ Max retries reached for method {}", methodInfo.methodName);
-                        currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
+                        log.error("❌ Max retries reached for method {}", methodInfo.getMethodName());
+                        currentMethodStats.complete("FAILED", methodInfo.getLineCoverage());
                         methodCompleted = true;
                     } else {
                         // 等待一会再重试
@@ -315,12 +339,12 @@ public class SimpleAgentOrchestrator {
                 // 检查响应是否为空
                 if (content == null || content.trim().isEmpty()) {
                     log.warn("⚠️ Empty response for method {}, attempt {}/{}",
-                            methodInfo.methodName, methodRetryCount + 1, maxMethodRetries);
+                            methodInfo.getMethodName(), methodRetryCount + 1, maxMethodRetries);
                     methodRetryCount++;
 
                     if (methodRetryCount >= maxMethodRetries) {
-                        log.error("❌ Max retries reached (empty responses) for method {}", methodInfo.methodName);
-                        currentMethodStats.complete("FAILED", methodInfo.lineCoverage);
+                        log.error("❌ Max retries reached (empty responses) for method {}", methodInfo.getMethodName());
+                        currentMethodStats.complete("FAILED", methodInfo.getLineCoverage());
                         methodCompleted = true;
                     } else {
                         try {
@@ -337,18 +361,18 @@ public class SimpleAgentOrchestrator {
 
                 // 如果没有从响应中获取到，直接调用工具获取实际覆盖率
                 if (finalCoverage <= 0) {
-                    finalCoverage = getActualMethodCoverage(projectRoot, targetFile, methodInfo.methodName);
+                    finalCoverage = getActualMethodCoverage(projectRoot, targetFile, methodInfo.getMethodName());
                 }
 
                 // 如果仍然获取不到，使用初始值
                 if (finalCoverage <= 0) {
-                    finalCoverage = methodInfo.lineCoverage;
+                    finalCoverage = methodInfo.getLineCoverage();
                 }
 
                 // 判断结果
                 String contentLower = content.toLowerCase();
                 if (contentLower.contains("failed") && !contentLower.contains("mutation")) {
-                    log.warn("❌ Method {} test generation failed", methodInfo.methodName);
+                    log.warn("❌ Method {} test generation failed", methodInfo.getMethodName());
                     methodRetryCount++;
 
                     if (methodRetryCount >= maxMethodRetries) {
@@ -357,7 +381,7 @@ public class SimpleAgentOrchestrator {
                     }
                 } else {
                     log.info("✅ Method {} completed with coverage: {}%",
-                            methodInfo.methodName, String.format("%.1f", finalCoverage));
+                            methodInfo.getMethodName(), String.format("%.1f", finalCoverage));
                     currentMethodStats.complete("SUCCESS", finalCoverage);
                     methodCompleted = true;
                 }
@@ -401,10 +425,10 @@ public class SimpleAgentOrchestrator {
                 - Current Branch Coverage: %.1f%%
 
                 """,
-                iteration, methodInfo.methodName,
+                iteration, methodInfo.getMethodName(),
                 targetFile,
-                methodInfo.methodName, methodInfo.priority,
-                methodInfo.lineCoverage, methodInfo.branchCoverage));
+                methodInfo.getMethodName(), methodInfo.getPriority(),
+                methodInfo.getLineCoverage(), methodInfo.getBranchCoverage()));
 
         // 添加覆盖率反馈建议（如果有）
         if (currentPreCheck != null && currentPreCheck.getFeedbackResult() != null) {
@@ -413,7 +437,7 @@ public class SimpleAgentOrchestrator {
 
             // 查找与当前方法相关的建议
             List<CoverageFeedbackEngine.ImprovementSuggestion> methodSuggestions = suggestions.stream()
-                    .filter(s -> s.getMethodName() != null && s.getMethodName().contains(methodInfo.methodName))
+                    .filter(s -> s.getMethodName() != null && s.getMethodName().contains(methodInfo.getMethodName()))
                     .limit(5)
                     .collect(java.util.stream.Collectors.toList());
 
@@ -456,7 +480,7 @@ public class SimpleAgentOrchestrator {
                 - Error handling paths
 
                 After completing, STOP.
-                """, methodInfo.methodName));
+                """, methodInfo.getMethodName()));
 
         return prompt.toString();
     }
@@ -799,15 +823,15 @@ public class SimpleAgentOrchestrator {
 
         // 添加预检查结果信息
         if (currentPreCheck != null) {
-            if (currentPreCheck.hasExistingTests) {
+            if (currentPreCheck.isHasExistingTests()) {
                 message.append("\n\n## Pre-check Results\n");
                 message.append("✅ Project compiled successfully\n");
                 message.append("✅ Existing test file found\n");
 
-                if (currentPreCheck.coverageInfo != null && !currentPreCheck.coverageInfo.isEmpty()) {
+                if (currentPreCheck.getCoverageInfo() != null && !currentPreCheck.getCoverageInfo().isEmpty()) {
                     message.append("\n### Current Coverage Analysis:\n");
                     message.append("```\n");
-                    message.append(currentPreCheck.coverageInfo);
+                    message.append(currentPreCheck.getCoverageInfo());
                     message.append("\n```\n");
                     message.append("\n### ⚠️ CRITICAL INSTRUCTIONS for Existing Tests:\n");
                     message.append("1. **READ the coverage report above** - it shows which methods need tests\n");
@@ -847,13 +871,13 @@ public class SimpleAgentOrchestrator {
             sb.append("## Pre-check Results (Already completed)\n");
             sb.append("✅ Project compiled successfully\n");
 
-            if (currentPreCheck.hasExistingTests) {
+            if (currentPreCheck.isHasExistingTests()) {
                 sb.append("✅ Existing test file found\n");
 
-                if (currentPreCheck.coverageInfo != null && !currentPreCheck.coverageInfo.isEmpty()) {
+                if (currentPreCheck.getCoverageInfo() != null && !currentPreCheck.getCoverageInfo().isEmpty()) {
                     sb.append("\n### Current Coverage Analysis:\n");
                     sb.append("```\n");
-                    sb.append(currentPreCheck.coverageInfo);
+                    sb.append(currentPreCheck.getCoverageInfo());
                     sb.append("\n```\n\n");
                     sb.append("### ⚠️ COVERAGE-DRIVEN TEST GENERATION (MANDATORY):\n\n");
                     sb.append("**Symbol meanings in coverage report:**\n");
@@ -938,10 +962,9 @@ public class SimpleAgentOrchestrator {
 
                 // 2. 尝试 classpath
                 String resourcePath = pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
-                try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
-                    if (in != null) {
-                        return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-                    }
+                String content = PromptTemplateLoader.loadTemplate(resourcePath);
+                if (!content.isEmpty()) {
+                    return content;
                 }
             } catch (IOException e) {
                 log.warn("Failed to load prompt from {}", pathStr);
@@ -1004,380 +1027,12 @@ public class SimpleAgentOrchestrator {
     }
 
     /**
-     * 方法覆盖率信息
-     */
-    public static class MethodCoverageInfo {
-        String methodName;
-        String priority;
-        double lineCoverage;
-        double branchCoverage;
-        boolean needsTest; // 是否需要生成测试
-
-        public MethodCoverageInfo(String methodName, String priority, double lineCoverage, double branchCoverage) {
-            this.methodName = methodName;
-            this.priority = priority;
-            this.lineCoverage = lineCoverage;
-            this.branchCoverage = branchCoverage;
-        }
-
-        public double getOverallCoverage() {
-            // 综合覆盖率：行覆盖和分支覆盖的加权平均
-            return (lineCoverage + branchCoverage) / 2;
-        }
-
-        @Override
-        public String toString() {
-            return String.format("%s [%s] - Line: %.1f%%, Branch: %.1f%%",
-                    methodName, priority, lineCoverage, branchCoverage);
-        }
-    }
-
-    /**
-     * 预检查结果
-     */
-    private static class PreCheckResult {
-        boolean success;
-        String errorMessage;
-        String coverageInfo; // 覆盖率信息文本，传递给 LLM
-        boolean hasExistingTests;
-        List<MethodCoverageInfo> methodCoverages; // 每个方法的覆盖率
-        CoverageFeedbackEngine.FeedbackResult feedbackResult; // 覆盖率反馈分析结果
-
-        static PreCheckResult success(String coverageInfo, boolean hasExistingTests,
-                List<MethodCoverageInfo> methodCoverages) {
-            PreCheckResult r = new PreCheckResult();
-            r.success = true;
-            r.coverageInfo = coverageInfo;
-            r.hasExistingTests = hasExistingTests;
-            r.methodCoverages = methodCoverages != null ? methodCoverages : new ArrayList<>();
-            return r;
-        }
-
-        static PreCheckResult failure(String error) {
-            PreCheckResult r = new PreCheckResult();
-            r.success = false;
-            r.errorMessage = error;
-            r.methodCoverages = new ArrayList<>();
-            return r;
-        }
-
-        /**
-         * 获取按覆盖率排序的方法列表（覆盖率低的在前）
-         */
-        List<MethodCoverageInfo> getMethodsSortedByCoverage() {
-            if (methodCoverages == null || methodCoverages.isEmpty()) {
-                return new ArrayList<>();
-            }
-            return methodCoverages.stream()
-                    .sorted((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()))
-                    .collect(java.util.stream.Collectors.toList());
-        }
-
-        void setFeedbackResult(CoverageFeedbackEngine.FeedbackResult result) {
-            this.feedbackResult = result;
-        }
-
-        CoverageFeedbackEngine.FeedbackResult getFeedbackResult() {
-            return feedbackResult;
-        }
-    }
-
-    /**
      * 执行预检查：编译工程和覆盖率分析
      */
     private PreCheckResult performPreCheck(String projectRoot, String targetFile) {
-        System.out.println("\n" + "=".repeat(60));
-        System.out.println("🔍 Pre-check Phase: Validating project environment");
-        System.out.println("=".repeat(60));
-
-        if (projectRoot == null) {
-            return PreCheckResult.failure("Cannot determine project root from target file: " + targetFile);
-        }
-
-        // Step 1: 检查测试文件是否存在
-        System.out.println("\n📄 Step 1: Checking for existing test file...");
-        String testFilePath = calculateTestFilePath(targetFile);
-        boolean hasExistingTests = Files.exists(Paths.get(testFilePath));
-
-        boolean skipTestExecution = false;
-
-        if (hasExistingTests) {
-            System.out.println("✅ Found existing test file: " + testFilePath);
-        } else {
-            System.out.println("ℹ️ No existing test file found. Will compile and create new tests.");
-            // 没有测试文件时，只编译不执行测试
-            try {
-                Map<String, Object> emptyArgs = new HashMap<>();
-                String compileResult = toolRegistry.invoke("compileProject", emptyArgs);
-                if (compileResult.contains("ERROR") || compileResult.contains("exitCode=1")) {
-                    System.err.println("❌ Compilation failed!");
-                    return PreCheckResult.failure("Compilation failed:\n" + compileResult);
-                }
-                System.out.println("✅ Compilation successful");
-                // 标记跳过测试执行，但继续后续的覆盖率分析（静态分析）
-                skipTestExecution = true;
-            } catch (Exception e) {
-                log.error("Failed to compile project", e);
-                return PreCheckResult.failure("Compilation error: " + e.getMessage());
-            }
-        }
-
-        // Step 2: 清理并执行测试，生成最新覆盖率数据
-        if (!skipTestExecution) {
-            System.out.println("\n🧪 Step 2: Running 'clean test' to generate fresh coverage data...");
-            try {
-                Map<String, Object> emptyArgs = new HashMap<>();
-                String testResult = toolRegistry.invoke("cleanAndTest", emptyArgs);
-
-                if (testResult.contains("exitCode=0") || testResult.contains("\"exitCode\":0")) {
-                    System.out.println("✅ Clean and test completed successfully");
-                } else if (testResult.contains("ERROR") || testResult.contains("exitCode=1")) {
-                    System.out.println("⚠️ Some tests may have failed, continuing with coverage analysis...");
-                } else {
-                    System.out.println("✅ Test execution completed");
-                }
-            } catch (Exception e) {
-                log.warn("Failed to execute tests: {}", e.getMessage());
-                System.out.println("⚠️ Could not run tests: " + e.getMessage());
-            }
-        } else {
-            System.out.println("\n🧪 Step 2: Skipping test execution (no existing tests)");
-        }
-
-        // Step 3: 获取覆盖率报告
-        System.out.println("\n📊 Step 3: Analyzing coverage...");
-        String coverageInfo = null;
-        String uncoveredMethods = null;
-        List<MethodCoverageInfo> methodCoverages = new ArrayList<>();
-
-        try {
-            String className = extractClassName(targetFile);
-            int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
-
-            // 获取详细覆盖率
-            Map<String, Object> coverageArgs = new HashMap<>();
-            coverageArgs.put("modulePath", projectRoot);
-            coverageArgs.put("className", className);
-            coverageInfo = toolRegistry.invoke("getMethodCoverageDetails", coverageArgs);
-
-            // 获取未覆盖方法列表
-            Map<String, Object> uncoveredArgs = new HashMap<>();
-            uncoveredArgs.put("modulePath", projectRoot);
-            uncoveredArgs.put("className", className);
-            uncoveredArgs.put("threshold", threshold);
-            uncoveredMethods = toolRegistry.invoke("getUncoveredMethods", uncoveredArgs);
-
-            if (coverageInfo != null && !coverageInfo.startsWith("ERROR")) {
-                System.out.println("✅ Coverage analysis complete:");
-                // 打印简要摘要
-                String[] lines = coverageInfo.split("\n");
-                for (int i = 0; i < Math.min(15, lines.length); i++) {
-                    System.out.println("   " + lines[i]);
-                }
-                if (lines.length > 15) {
-                    System.out.println("   ... (" + (lines.length - 15) + " more lines)");
-                }
-
-                // 解析覆盖率数据，创建 MethodCoverageInfo 列表
-                methodCoverages = parseCoverageInfo(coverageInfo, threshold);
-
-                // 合并覆盖率信息
-                if (uncoveredMethods != null && !uncoveredMethods.startsWith("ERROR")) {
-                    coverageInfo = coverageInfo + "\n\n" + uncoveredMethods;
-                }
-            } else {
-                System.out.println("⚠️ Could not get coverage details (no JaCoCo report found)");
-
-                // 尝试静态分析获取方法列表（作为回退机制）
-                try {
-                    System.out.println("ℹ️ Attempting static analysis to discover methods...");
-                    Map<String, Object> analyzeArgs = new HashMap<>();
-                    analyzeArgs.put("filePath", targetFile);
-                    // 注意：CodeAnalyzerTool 需要有获取方法列表的功能，这里假设使用 analyzeCode
-                    String analysisResult = toolRegistry.invoke("analyzeCode", analyzeArgs);
-
-                    if (analysisResult != null && !analysisResult.startsWith("ERROR")) {
-                        // 解析 AST 分析结果，提取方法名
-                        // 这里做一个简单的模拟实现，实际应该解析 JSON 或结构化输出
-                        // 假设 analyzeCode 返回了包含方法签名的文本
-                        List<String> methodNames = extractMethodNamesFromAnalysis(analysisResult);
-
-                        if (!methodNames.isEmpty()) {
-                            System.out.println("✅ Discovered " + methodNames.size() + " methods via static analysis");
-                            StringBuilder sb = new StringBuilder("Static Analysis Result (No coverage data yet):\n");
-                            for (String method : methodNames) {
-                                // 构造默认的 0% 覆盖率信息
-                                methodCoverages.add(new MethodCoverageInfo(method, "P0", 0.0, 0.0));
-                                sb.append(String.format("✗ %s Line: 0.0%% Branch: 0.0%%\n", method));
-                            }
-                            coverageInfo = sb.toString();
-                        }
-                    }
-                } catch (Exception ex) {
-                    log.warn("Static analysis fallback failed", ex);
-                }
-
-                if (coverageInfo == null) {
-                    coverageInfo = null; // 保持 null 以触发 Fallback 模式
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to get coverage: {}", e.getMessage());
-            System.out.println("⚠️ Could not analyze coverage: " + e.getMessage());
-        }
-
-        // Step 4: 运行覆盖率反馈分析（如果可用）
-        CoverageFeedbackEngine.FeedbackResult feedbackResult = null;
-        if (feedbackEngine != null && coverageInfo != null) {
-            System.out.println("\n🔬 Step 4: Running coverage feedback analysis...");
-            try {
-                String className = extractClassName(targetFile);
-                int threshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
-                feedbackResult = feedbackEngine.runFeedbackCycle(projectRoot, className, threshold);
-
-                if (feedbackResult != null) {
-                    System.out.println("✅ Feedback analysis complete:");
-                    System.out.println("   Current coverage: " + feedbackResult.getCurrentCoverage() + "%");
-                    System.out.println("   Target: " + feedbackResult.getTargetCoverage() + "%");
-                    System.out.println("   Status: " + (feedbackResult.isTargetMet() ? "✓ TARGET MET" : "✗ NOT MET"));
-
-                    if (!feedbackResult.isTargetMet()) {
-                        List<CoverageFeedbackEngine.ImprovementSuggestion> improvements = feedbackResult
-                                .getImprovements();
-                        if (!improvements.isEmpty()) {
-                            System.out.println("   Improvement suggestions:");
-                            for (int i = 0; i < Math.min(5, improvements.size()); i++) {
-                                CoverageFeedbackEngine.ImprovementSuggestion s = improvements.get(i);
-                                System.out.printf("   - [%s] %s: %s%n", s.getPriority(), s.getType(),
-                                        s.getDescription());
-                            }
-                            if (improvements.size() > 5) {
-                                System.out.println("   ... and " + (improvements.size() - 5) + " more suggestions");
-                            }
-                        }
-                        System.out.println("   Recommended action: " + feedbackResult.getNextAction());
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Feedback analysis failed: {}", e.getMessage());
-                System.out.println("⚠️ Feedback analysis failed: " + e.getMessage());
-            }
-        }
-
-        System.out.println("\n" + "=".repeat(60));
-        System.out.println("✅ Pre-check completed. Starting test generation...");
-        System.out.println("=".repeat(60) + "\n");
-
-        PreCheckResult result = PreCheckResult.success(coverageInfo, hasExistingTests, methodCoverages);
-        result.setFeedbackResult(feedbackResult);
-        return result;
+        return preCheckExecutor.execute(projectRoot, targetFile);
     }
 
-    /**
-     * 解析覆盖率信息，提取每个方法的覆盖率
-     */
-    private List<MethodCoverageInfo> parseCoverageInfo(String coverageInfo, int threshold) {
-        List<MethodCoverageInfo> methods = new ArrayList<>();
-        if (coverageInfo == null || coverageInfo.isEmpty()) {
-            return methods;
-        }
-
-        // 解析格式: ✗ methodName(params) Line: 0.0% Branch: 0.0%
-        // 或: ◐ methodName(params) Line: 50.0% Branch: 25.0%
-        // 或: ✓ methodName(params) Line: 100.0% Branch: 100.0%
-        Pattern pattern = Pattern
-                .compile("([✓◐✗])\\s+(\\w+)\\([^)]*\\)\\s+Line:\\s*([\\d.]+)%\\s+Branch:\\s*([\\d.]+)%");
-        Matcher matcher = pattern.matcher(coverageInfo);
-
-        while (matcher.find()) {
-            // status = matcher.group(1); // ✓, ◐, ✗ - 不使用，直接根据覆盖率判断
-            String methodName = matcher.group(2);
-            double lineCoverage = Double.parseDouble(matcher.group(3));
-            double branchCoverage = Double.parseDouble(matcher.group(4));
-
-            // 跳过构造方法
-            if ("constructor".equals(methodName)) {
-                continue;
-            }
-
-            // 确定优先级：覆盖率低的优先级高
-            String priority;
-            if (lineCoverage == 0) {
-                priority = "P0"; // 无覆盖，最高优先级
-            } else if (lineCoverage < threshold) {
-                priority = "P1"; // 部分覆盖
-            } else {
-                priority = "P2"; // 已达到覆盖率要求
-            }
-
-            MethodCoverageInfo info = new MethodCoverageInfo(methodName, priority, lineCoverage, branchCoverage);
-            info.needsTest = lineCoverage < threshold;
-            methods.add(info);
-        }
-
-        // 按覆盖率排序（低的在前）
-        methods.sort((a, b) -> Double.compare(a.getOverallCoverage(), b.getOverallCoverage()));
-
-        log.info("Parsed {} methods from coverage info", methods.size());
-        for (MethodCoverageInfo m : methods) {
-            log.info("  - {}", m);
-        }
-
-        return methods;
-    }
-
-    /**
-     * 从分析结果中提取方法名
-     * 这是一个简单的辅助方法，用于解析 analyzeCode 的输出
-     */
-    private List<String> extractMethodNamesFromAnalysis(String analysisResult) {
-        List<String> methods = new ArrayList<>();
-        // 匹配常见的 AST 输出格式，例如 "Method: methodName(args)" 或 "- methodName"
-        // 增加对 " - " 前缀的匹配，并处理可能的参数列表
-        Pattern pattern = Pattern.compile("(?:Method:|\\s*-\\s+)([a-zA-Z_][a-zA-Z0-9_]*)(?:\\(.*\\))?");
-        Matcher matcher = pattern.matcher(analysisResult);
-        while (matcher.find()) {
-            String name = matcher.group(1);
-            if (!methods.contains(name) && !name.equals("main") && !name.equals("toString")
-                    && !name.equals("hashCode")) {
-                methods.add(name);
-            }
-        }
-
-        // 如果上面的正则没匹配到，尝试匹配 "Method: methodName" (没有参数列表的情况)
-        Pattern simplePattern = Pattern.compile("Method:\\s*([a-zA-Z_][a-zA-Z0-9_]*)");
-        Matcher simpleMatcher = simplePattern.matcher(analysisResult);
-        while (simpleMatcher.find()) {
-            String name = simpleMatcher.group(1);
-            if (!methods.contains(name) && !name.equals("main") && !name.equals("toString")
-                    && !name.equals("hashCode")) {
-                methods.add(name);
-            }
-        }
-
-        return methods;
-    }
-
-    /**
-     * 计算测试文件路径
-     */
-    private String calculateTestFilePath(String sourceFile) {
-        // 1. 转换为绝对路径
-        Path absPath = Paths.get(sourceFile).toAbsolutePath();
-        String normalizedPath = absPath.toString().replace("\\", "/");
-
-        // 2. 替换 src/main/java 为 src/test/java
-        // 使用正则替换，兼容不同的路径前缀
-        String testPath = normalizedPath.replaceFirst("/src/main/java/", "/src/test/java/");
-
-        // 如果没有替换成功（可能路径结构不同），尝试不带前导斜杠的替换
-        if (testPath.equals(normalizedPath)) {
-            testPath = normalizedPath.replaceFirst("src/main/java/", "src/test/java/");
-        }
-
-        // 3. 替换后缀
-        return testPath.replace(".java", "Test.java");
-    }
 
     /**
      * 提取全限定类名

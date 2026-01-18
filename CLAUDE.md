@@ -35,6 +35,7 @@ Unit Test Agent 4j 是一个 AI 驱动的 Java 单元测试自动生成工具，
 | **变更影响分析** | 构建类依赖图，识别代码变更影响的测试（v2.1.0） |
 | **测试质量评估** | PITest 变异测试 + 边界值分析 + 覆盖率反馈循环 |
 | **智能停滞检测** | 覆盖率停止增长时智能停止迭代（v2.1.0） |
+| **动态阶段切换** | 根据工作流阶段动态加载工具子集，节省 40-60% Token（v2.2.0） |
 | **LSP 语法检查** | 可选 Eclipse JDT Language Server 语义分析 |
 | **预编译验证** | JavaParser 快速语法检查（~10ms） |
 
@@ -102,13 +103,30 @@ java -jar target/utagent.jar --target path/to/Class.java --interactive
   - 支持工具调用和流式响应
 
 - **`tool/`**: 工具注册与执行
-  - `ToolRegistry`: 反射式工具发现和注册
+  - `ToolRegistry`: 反射式工具发现和注册，支持动态清空和重新加载
   - `JsonUtil`: 统一的 JSON 序列化/反序列化
+
+- **`phase/`**: 阶段管理（v2.2.0 新增）
+  - `WorkflowPhase`: 工作流阶段枚举（ANALYSIS → GENERATION → VERIFICATION → REPAIR → FULL）
+  - `PhaseContext`: 阶段上下文，跟踪当前阶段和阶段间数据
+  - `PhaseManager`: 阶段管理器，负责阶段切换和工具重新加载
+
+- **`precheck/`**: 预检查执行（v2.2.0 重构）
+  - `PreCheckExecutor`: 预检查执行器，负责项目环境验证、编译、测试和覆盖率分析
+  - `CoverageAnalyzer`: 覆盖率分析器，负责解析和分析覆盖率报告
+
+- **`prompt/`**: Prompt 构建（v2.2.0 重构）
+  - `PromptBuilder`: Prompt 构建器接口
+  - `TraditionalPromptBuilder`: 传统模式 Prompt 构建器
+  - `IterativePromptBuilder`: 迭代模式 Prompt 构建器
+  - `PromptTemplateLoader`: 模板加载器
 
 - **`model/`**: 数据模型
   - `Message`: 统一的消息模型
   - `ToolCall`: 工具调用模型
   - `IterationStats`: 迭代统计
+  - `MethodCoverageInfo`: 方法覆盖率信息（v2.2.0 提取）
+  - `PreCheckResult`: 预检查结果（v2.2.0 提取）
 
 ### Agent 层 (`engine/`)
 处理推理、编排和 LLM 交互
@@ -246,6 +264,11 @@ workflow:
 
   # 最小覆盖率增益（v2.1.0）
   min-coverage-gain: 1.0
+
+  # 启用动态阶段切换（v2.2.0）
+  # 根据工作流阶段动态加载工具子集，节省 40-60% Token
+  # ANALYSIS → GENERATION → VERIFICATION → REPAIR
+  enable-phase-switching: false
 
 # 增量模式配置
 incremental:

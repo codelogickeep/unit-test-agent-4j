@@ -4,7 +4,7 @@ An AI-powered Java unit test generation agent. Automatically generates high-qual
 
 [![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://openjdk.java.net/)
 [![Maven](https://img.shields.io/badge/Maven-3.8+-red.svg)](https://maven.apache.org/)
-[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
+[![Version](https://img.shields.io/badge/Version-2.2.0-green.svg)](https://github.com/codelogickeep/unit-test-agent-4j)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 ## Features
@@ -14,6 +14,7 @@ An AI-powered Java unit test generation agent. Automatically generates high-qual
 - 📊 **Coverage-Driven** - Analyzes coverage and supplements missing tests
 - 🔄 **Iterative Mode** - Generates tests one method at a time
 - ✅ **LSP Syntax Check** - Optional semantic analysis before compile
+- 🔄 **Dynamic Phase Switching** - Saves 40-60% tokens (v2.2.0)
 
 ## Quick Install
 

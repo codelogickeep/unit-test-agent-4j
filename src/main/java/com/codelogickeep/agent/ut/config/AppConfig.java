@@ -105,6 +105,8 @@ public class AppConfig {
         private int maxStaleIterations = 3; // 最大无进展迭代次数
         @JsonProperty("min-coverage-gain")
         private int minCoverageGain = 1; // 每次迭代最小覆盖率提升 (%)
+        @JsonProperty("enable-phase-switching")
+        private boolean enablePhaseSwitching = false; // 是否启用动态阶段切换（默认关闭，保持向后兼容）
     }
 
     @Data

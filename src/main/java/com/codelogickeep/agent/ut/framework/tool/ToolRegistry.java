@@ -139,7 +139,23 @@ public class ToolRegistry {
     public boolean hasTools() {
         return !tools.isEmpty();
     }
-    
+
+    /**
+     * 清空所有工具
+     */
+    public void clear() {
+        tools.clear();
+        definitions.clear();
+        log.debug("Cleared all tools");
+    }
+
+    /**
+     * 获取所有工具名称
+     */
+    public List<String> getToolNames() {
+        return new ArrayList<>(tools.keySet());
+    }
+
     /**
      * 获取工具描述（支持多种注解）
      */
