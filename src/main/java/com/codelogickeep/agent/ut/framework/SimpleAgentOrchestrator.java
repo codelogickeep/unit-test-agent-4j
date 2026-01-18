@@ -79,8 +79,8 @@ public class SimpleAgentOrchestrator {
 
         // 根据阶段管理器加载工具
         if (phaseManager.isIterativeMode()) {
-            // 阶段切换模式：只加载当前阶段的工具
-            phaseManager.switchToPhase(phaseManager.getCurrentPhase(), toolRegistry);
+            // 阶段切换模式：加载当前阶段的工具
+            phaseManager.initializeTools(toolRegistry);
         } else {
             // 传统模式：加载所有工具
             this.toolRegistry.registerAll(tools);

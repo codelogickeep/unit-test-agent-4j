@@ -35,6 +35,16 @@ public class PhaseManager {
     }
 
     /**
+     * 初始化工具 - 加载初始阶段的工具到 ToolRegistry
+     * 必须在构造函数之后调用一次
+     */
+    public void initializeTools(ToolRegistry toolRegistry) {
+        WorkflowPhase currentPhase = context.getCurrentPhase();
+        log.info("Initializing tools for phase: {}", currentPhase);
+        reloadToolsForPhase(currentPhase, toolRegistry);
+    }
+
+    /**
      * 切换到指定阶段
      */
     public void switchToPhase(WorkflowPhase phase, ToolRegistry toolRegistry) {
