@@ -974,12 +974,14 @@ public class SimpleAgentOrchestrator {
                 1. Check if test directory exists (directoryExists)
                 2. Check if test file exists (fileExists)
                 3. Read the source file (readFile)
-                4. Analyze method priorities (getPriorityMethods)
-                5. Initialize iteration (initMethodIteration)
-                6. Create the test file skeleton if it doesn't exist (writeFile)
+                4. Create the test file skeleton if it doesn't exist (writeFile with basic imports and class declaration)
 
-                After initialization, call getNextMethod() to get the first method.
-                Then STOP and wait for next instruction.
+                ⚠️ IMPORTANT:
+                - DO NOT call getPriorityMethods or initMethodIteration - already done by system
+                - DO NOT call getNextMethod - the orchestrator will handle method iteration
+                - Just ensure the test file exists with proper skeleton
+
+                After creating the test skeleton, STOP and wait for next instruction.
                 """);
 
         return sb.toString();

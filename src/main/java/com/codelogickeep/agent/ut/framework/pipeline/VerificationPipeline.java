@@ -122,9 +122,9 @@ public class VerificationPipeline {
     private VerificationResult runSyntaxCheck(String testFilePath) {
         try {
             Map<String, Object> args = new HashMap<>();
-            args.put("path", testFilePath);
+            args.put("filePath", testFilePath);
             
-            log.info("📝 checkSyntax 输入: path={}", testFilePath);
+            log.info("📝 checkSyntax 输入: filePath={}", testFilePath);
             String result = toolRegistry.invoke("checkSyntax", args);
             log.info("📝 checkSyntax 输出: {}", truncateForLog(result));
             
@@ -132,8 +132,15 @@ public class VerificationPipeline {
                 return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, "工具返回 null");
             }
             
+            // 先检查是否有错误（case-insensitive）
+            String resultLower = result.toLowerCase();
+            if (resultLower.startsWith("error") || resultLower.contains("missing required parameter")) {
+                return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, "工具调用错误", result);
+            }
+            
             // 解析结果
-            if (result.contains("VALID") || result.contains("LSP_OK") || result.contains("No errors")) {
+            if (result.contains("VALID") || result.contains("LSP_OK") || result.contains("No errors") ||
+                result.contains("SYNTAX_OK")) {
                 return VerificationResult.success(0, false);
             } else if (result.contains("ERROR") || result.contains("LSP_ERRORS") || result.contains("INVALID")) {
                 return VerificationResult.failure(VerificationStep.SYNTAX_CHECK, "语法错误", result);
@@ -153,14 +160,20 @@ public class VerificationPipeline {
     private VerificationResult runLspCheck(String testFilePath) {
         try {
             Map<String, Object> args = new HashMap<>();
-            args.put("path", testFilePath);
+            args.put("filePath", testFilePath);
             
-            log.info("🔍 checkSyntaxWithLsp 输入: path={}", testFilePath);
+            log.info("🔍 checkSyntaxWithLsp 输入: filePath={}", testFilePath);
             String result = toolRegistry.invoke("checkSyntaxWithLsp", args);
             log.info("🔍 checkSyntaxWithLsp 输出: {}", truncateForLog(result));
             
             if (result == null) {
                 return VerificationResult.failure(VerificationStep.LSP_CHECK, "工具返回 null");
+            }
+            
+            // 先检查是否有错误（case-insensitive）
+            String resultLower = result.toLowerCase();
+            if (resultLower.startsWith("error") || resultLower.contains("missing required parameter")) {
+                return VerificationResult.failure(VerificationStep.LSP_CHECK, "工具调用错误", result);
             }
             
             // 解析结果
@@ -196,6 +209,17 @@ public class VerificationPipeline {
                 return VerificationResult.failure(VerificationStep.COMPILE, "工具返回 null");
             }
             
+            // 先检查是否有工具错误（case-insensitive）
+            String resultLower = result.toLowerCase();
+            if (resultLower.startsWith("error") || resultLower.contains("missing required parameter")) {
+                return VerificationResult.failure(VerificationStep.COMPILE, "工具调用错误", result);
+            }
+            
+            // 检查 CompileGuard 阻止编译
+            if (result.contains("COMPILE_BLOCKED")) {
+                return VerificationResult.failure(VerificationStep.COMPILE, "编译被阻止（语法检查未通过）", result);
+            }
+            
             // 解析结果
             if (result.contains("exitCode=0") || result.contains("\"exitCode\":0") || 
                 result.contains("BUILD SUCCESS") || result.contains("Compilation successful")) {
@@ -219,24 +243,32 @@ public class VerificationPipeline {
     private VerificationResult runTest(String testClassName) {
         try {
             Map<String, Object> args = new HashMap<>();
-            args.put("testClass", testClassName);
+            args.put("testClassName", testClassName);
             
+            log.info("🧪 executeTest 输入: testClassName={}", testClassName);
             String result = toolRegistry.invoke("executeTest", args);
+            log.info("🧪 executeTest 输出: {}", truncateForLog(result));
             log.debug("executeTest result length: {}", result != null ? result.length() : 0);
             
             if (result == null) {
                 return VerificationResult.failure(VerificationStep.TEST, "工具返回 null");
             }
             
-            // 解析结果
+            // 先检查是否有工具错误（case-insensitive）
+            String resultLower = result.toLowerCase();
+            if (resultLower.startsWith("error") || resultLower.contains("missing required parameter")) {
+                return VerificationResult.failure(VerificationStep.TEST, "工具调用错误", result);
+            }
+            
+            // 解析测试结果
             if (result.contains("exitCode=0") || result.contains("\"exitCode\":0") ||
-                result.contains("Tests run:") && !result.contains("Failures: 0") && !result.contains("Errors: 0")) {
-                // 需要更精确的解析
-                if (result.contains("Failures: 0") && result.contains("Errors: 0")) {
-                    return VerificationResult.success(0, false);
-                } else if (result.contains("BUILD SUCCESS")) {
-                    return VerificationResult.success(0, false);
-                }
+                result.contains("BUILD SUCCESS")) {
+                return VerificationResult.success(0, false);
+            }
+            
+            // 更精确检查测试通过
+            if (result.contains("Tests run:") && result.contains("Failures: 0") && result.contains("Errors: 0")) {
+                return VerificationResult.success(0, false);
             }
             
             if (result.contains("exitCode=1") || result.contains("\"exitCode\":1") ||
