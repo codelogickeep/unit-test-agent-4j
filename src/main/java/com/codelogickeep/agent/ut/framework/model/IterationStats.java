@@ -68,7 +68,7 @@ public class IterationStats {
     }
 
     /**
-     * 记录提示词大小
+     * 记录提示词大小（同时累加到当前方法和总计）
      */
     public void recordPromptSize(int tokens) {
         totalPromptTokens += tokens;
@@ -79,7 +79,7 @@ public class IterationStats {
     }
 
     /**
-     * 记录响应大小
+     * 记录响应大小（同时累加到当前方法和总计）
      */
     public void recordResponseSize(int tokens) {
         totalResponseTokens += tokens;
@@ -87,6 +87,20 @@ public class IterationStats {
         if (current != null) {
             current.addResponseTokens(tokens);
         }
+    }
+    
+    /**
+     * 仅累加到总计（当方法已单独累加时使用）
+     */
+    public void addToTotalPromptTokens(int tokens) {
+        totalPromptTokens += tokens;
+    }
+    
+    /**
+     * 仅累加到总计（当方法已单独累加时使用）
+     */
+    public void addToTotalResponseTokens(int tokens) {
+        totalResponseTokens += tokens;
     }
 
     /**

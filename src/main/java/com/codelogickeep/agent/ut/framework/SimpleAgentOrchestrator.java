@@ -428,6 +428,11 @@ public class SimpleAgentOrchestrator {
             executor.setTokenStatsCallback((prompt, response) -> {
                 methodStats.addPromptTokens(prompt);
                 methodStats.addResponseTokens(response);
+                // 累加到总计（使用专用方法避免重复累加到 methodStats）
+                if (iterationStats != null) {
+                    iterationStats.addToTotalPromptTokens(prompt);
+                    iterationStats.addToTotalResponseTokens(response);
+                }
             });
         }
 
