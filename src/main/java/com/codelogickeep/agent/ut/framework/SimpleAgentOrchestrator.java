@@ -13,6 +13,10 @@ import com.codelogickeep.agent.ut.framework.precheck.PreCheckExecutor;
 import com.codelogickeep.agent.ut.framework.tool.ToolRegistry;
 import com.codelogickeep.agent.ut.framework.util.ClassNameExtractor;
 import com.codelogickeep.agent.ut.framework.util.PromptTemplateLoader;
+import com.codelogickeep.agent.ut.framework.pipeline.FixPromptBuilder;
+import com.codelogickeep.agent.ut.framework.pipeline.VerificationPipeline;
+import com.codelogickeep.agent.ut.framework.pipeline.VerificationResult;
+import com.codelogickeep.agent.ut.framework.pipeline.VerificationStep;
 import com.codelogickeep.agent.ut.model.PreCheckResult;
 import com.codelogickeep.agent.ut.model.MethodCoverageInfo;
 import com.codelogickeep.agent.ut.tools.BoundaryAnalyzerTool;
@@ -55,6 +59,7 @@ public class SimpleAgentOrchestrator {
     private final PhaseManager phaseManager;
     private final List<Object> allTools;
     private final PreCheckExecutor preCheckExecutor;
+    private final VerificationPipeline verificationPipeline;
 
     // 迭代统计
     private IterationStats iterationStats;
@@ -87,6 +92,9 @@ public class SimpleAgentOrchestrator {
 
         // 初始化 PreCheckExecutor
         this.preCheckExecutor = new PreCheckExecutor(toolRegistry, config, feedbackEngine);
+
+        // 初始化验证管道
+        this.verificationPipeline = new VerificationPipeline(toolRegistry, config);
 
         log.info("SimpleAgentOrchestrator initialized with {} tools, phase switching: {}",
                 toolRegistry.size(), phaseManager.isEnablePhaseSwitching());
@@ -193,18 +201,25 @@ public class SimpleAgentOrchestrator {
     }
 
     /**
-     * 迭代模式 - 每个方法独立上下文
+     * 迭代模式 - 每个方法独立上下文 + 自动验证管道
      * 
-     * 基于预检查的覆盖率数据，按覆盖率从低到高处理方法：
-     * 1. 覆盖率已达标的方法 -> 执行变异测试 -> 通过则跳过
-     * 2. 覆盖率未达标的方法 -> 生成测试代码
+     * 新流程：
+     * 1. LLM 生成测试代码
+     * 2. Orchestrator 自动执行验证管道（语法检查 → 编译 → 测试 → 覆盖率）
+     * 3. 验证失败时调用 LLM 修复
+     * 4. 覆盖率不足时让 LLM 继续生成测试
      */
     private void runIterative(String targetFile, String taskContext) {
-        log.info("Starting Agent (ITERATIVE mode) for: {}", targetFile);
+        log.info("Starting Agent (ITERATIVE mode with auto-verification) for: {}", targetFile);
 
         String projectRoot = extractProjectRoot(targetFile);
         String systemPrompt = loadSystemPrompt(projectRoot);
         int coverageThreshold = config.getWorkflow() != null ? config.getWorkflow().getCoverageThreshold() : 80;
+
+        // 计算测试文件路径和类名
+        String testFilePath = calculateTestFilePath(targetFile);
+        String targetClassName = extractClassName(targetFile);
+        String testClassName = targetClassName + "Test";
 
         // 初始化统计
         iterationStats = new IterationStats(targetFile);
@@ -216,7 +231,6 @@ public class SimpleAgentOrchestrator {
 
         if (methodsToProcess.isEmpty()) {
             log.info("No method coverage info available, falling back to LLM-driven iteration");
-            // 如果没有覆盖率数据，使用 LLM 驱动的迭代
             runIterativeFallback(targetFile, taskContext, systemPrompt, projectRoot);
             return;
         }
@@ -229,7 +243,7 @@ public class SimpleAgentOrchestrator {
                     String.format("%.1f", m.getBranchCoverage()));
         }
 
-        // ===== Phase 1: 初始化 =====
+        // ===== Phase 1: 初始化（创建测试文件骨架）=====
         log.info(">>> Phase 1: Initialization");
 
         AgentExecutor initExecutor = createExecutor(systemPrompt, 8);
@@ -245,16 +259,17 @@ public class SimpleAgentOrchestrator {
             return;
         }
 
-        // ===== Phase 2: 逐方法迭代（基于覆盖率数据）=====
+        // ===== Phase 2: 逐方法迭代（使用自动验证管道）=====
         int processedCount = 0;
         int skippedCount = 0;
         final int maxMethodRetries = 3;
+        final int maxVerificationRetries = 3;
 
         for (int i = 0; i < methodsToProcess.size(); i++) {
             MethodCoverageInfo methodInfo = methodsToProcess.get(i);
             log.info(">>> Phase 2: Method #{} - {} [{}]", i + 1, methodInfo.getMethodName(), methodInfo.getPriority());
 
-            // 创建方法统计，使用实际方法名和初始覆盖率
+            // 创建方法统计
             IterationStats.MethodStats currentMethodStats = iterationStats.startMethod(
                     methodInfo.getMethodName(),
                     methodInfo.getPriority(),
@@ -262,127 +277,96 @@ public class SimpleAgentOrchestrator {
 
             // 检查是否已达到覆盖率要求
             if (methodInfo.getLineCoverage() >= coverageThreshold) {
-                log.info("📊 Method {} already has {}% coverage (threshold: {}%)",
-                        methodInfo.getMethodName(), String.format("%.1f", methodInfo.getLineCoverage()), coverageThreshold);
-
-                // 覆盖率已达标，直接跳过该方法
-                log.info("✅ Method {} coverage sufficient - SKIPPING", methodInfo.getMethodName());
-                currentMethodStats.markSkipped("Coverage " + String.format("%.1f", methodInfo.getLineCoverage()) + "% >= "
-                        + coverageThreshold + "%");
+                log.info("📊 Method {} already has {}% coverage (threshold: {}%) - SKIPPING",
+                        methodInfo.getMethodName(), String.format("%.1f", methodInfo.getLineCoverage()),
+                        coverageThreshold);
+                currentMethodStats.markSkipped("Coverage already met");
                 currentMethodStats.complete("SKIPPED", methodInfo.getLineCoverage());
                 skippedCount++;
                 continue;
             }
 
-            // 需要生成测试
             processedCount++;
-            int methodRetryCount = 0;
             boolean methodCompleted = false;
+            int coverageRetryCount = 0;
+            double currentCoverage = methodInfo.getLineCoverage();
 
-            while (!methodCompleted && methodRetryCount < maxMethodRetries) {
-                // 每个方法创建新的执行器（清空上下文！）
-                AgentExecutor methodExecutor = createExecutor(systemPrompt, 10);
-
-                methodExecutor.setTokenStatsCallback((prompt, response) -> {
-                    currentMethodStats.addPromptTokens(prompt);
-                    currentMethodStats.addResponseTokens(response);
-                    log.info("📊 Method {} - Prompt: {} tokens, Response: {} tokens",
-                            methodInfo.getMethodName(), prompt, response);
-                });
-
-                // 构建针对特定方法的提示词
-                String methodPrompt = buildTargetedMethodPrompt(targetFile, methodInfo, i + 1);
-
-                // 流式执行（带重试）
-                ConsoleStreamingHandler handler = new ConsoleStreamingHandler();
-                methodExecutor.runStream(methodPrompt, handler);
-
-                try {
-                    handler.await(5, TimeUnit.MINUTES);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    currentMethodStats.complete("INTERRUPTED", methodInfo.getLineCoverage());
-                    break;
+            // 外层循环：覆盖率不足时继续生成测试
+            while (!methodCompleted && coverageRetryCount < maxMethodRetries) {
+                
+                // Step 1: 让 LLM 生成测试代码
+                log.info("🤖 Step 1: Generating tests for method {}", methodInfo.getMethodName());
+                String generatePrompt = coverageRetryCount == 0
+                        ? FixPromptBuilder.buildGenerateTestPrompt(targetFile, methodInfo.getMethodName(), 
+                                testFilePath, currentCoverage)
+                        : FixPromptBuilder.buildMoreTestsPrompt(targetFile, methodInfo.getMethodName(),
+                                testFilePath, currentCoverage, coverageThreshold);
+                
+                boolean codeGenerated = runLlmAndWait(systemPrompt, generatePrompt, currentMethodStats);
+                if (!codeGenerated) {
+                    log.error("❌ Failed to generate test code for method {}", methodInfo.getMethodName());
+                    currentMethodStats.complete("FAILED", currentCoverage);
+                    methodCompleted = true;
+                    continue;
                 }
 
-                String content = handler.getContent();
+                // Step 2: 自动执行验证管道（带修复循环）
+                log.info("🔄 Step 2: Running verification pipeline");
+                int verificationRetryCount = 0;
+                VerificationResult verifyResult = null;
+
+                while (verificationRetryCount < maxVerificationRetries) {
+                    verifyResult = verificationPipeline.execute(
+                            testFilePath, testClassName, targetClassName,
+                            methodInfo.getMethodName(), projectRoot);
+
+                    if (verifyResult.isSuccess()) {
+                        break;
+                    }
+
+                    // 验证失败，调用 LLM 修复
+                    log.warn("⚠️ Verification failed at step: {}", verifyResult.getFailedStep());
+                    String fixPrompt = buildFixPromptForStep(verifyResult, testFilePath, testClassName);
+                    
+                    boolean fixed = runLlmAndWait(systemPrompt, fixPrompt, currentMethodStats);
+                    if (!fixed) {
+                        log.error("❌ Failed to fix error");
+                        break;
+                    }
+                    
+                    verificationRetryCount++;
+                    log.info("🔄 Retrying verification (attempt {}/{})", 
+                            verificationRetryCount + 1, maxVerificationRetries);
+                }
+
+                // 检查验证结果
+                if (verifyResult == null || !verifyResult.isSuccess()) {
+                    log.error("❌ Verification failed after {} attempts", maxVerificationRetries);
+                    currentMethodStats.complete("FAILED", currentCoverage);
+                    methodCompleted = true;
+                    continue;
+                }
+
+                // 验证成功，检查覆盖率
+                currentCoverage = verifyResult.getCoverage();
                 currentMethodStats.incrementIteration();
 
-                // 检查是否有错误
-                if (handler.getError() != null) {
-                    Throwable error = handler.getError();
-                    log.error("❌ LLM call failed for method {}: {}", methodInfo.getMethodName(), error.getMessage());
-                    if (error.getCause() != null) {
-                        log.error("   Caused by: {}", error.getCause().getMessage());
-                    }
-
-                    methodRetryCount++;
-                    log.warn("⏳ Retrying... attempt {}/{}", methodRetryCount + 1, maxMethodRetries);
-
-                    if (methodRetryCount >= maxMethodRetries) {
-                        log.error("❌ Max retries reached for method {}", methodInfo.getMethodName());
-                        currentMethodStats.complete("FAILED", methodInfo.getLineCoverage());
-                        methodCompleted = true;
-                    } else {
-                        // 等待一会再重试
-                        try {
-                            Thread.sleep(2000);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }
-                    continue;
-                }
-
-                // 检查响应是否为空
-                if (content == null || content.trim().isEmpty()) {
-                    log.warn("⚠️ Empty response for method {}, attempt {}/{}",
-                            methodInfo.getMethodName(), methodRetryCount + 1, maxMethodRetries);
-                    methodRetryCount++;
-
-                    if (methodRetryCount >= maxMethodRetries) {
-                        log.error("❌ Max retries reached (empty responses) for method {}", methodInfo.getMethodName());
-                        currentMethodStats.complete("FAILED", methodInfo.getLineCoverage());
-                        methodCompleted = true;
-                    } else {
-                        try {
-                            Thread.sleep(2000);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }
-                    continue;
-                }
-
-                // 解析最终覆盖率 - 先从 LLM 响应中提取
-                double finalCoverage = extractCoverage(content);
-
-                // 如果没有从响应中获取到，直接调用工具获取实际覆盖率
-                if (finalCoverage <= 0) {
-                    finalCoverage = getActualMethodCoverage(projectRoot, targetFile, methodInfo.getMethodName());
-                }
-
-                // 如果仍然获取不到，使用初始值
-                if (finalCoverage <= 0) {
-                    finalCoverage = methodInfo.getLineCoverage();
-                }
-
-                // 判断结果
-                String contentLower = content.toLowerCase();
-                if (contentLower.contains("failed") && !contentLower.contains("mutation")) {
-                    log.warn("❌ Method {} test generation failed", methodInfo.getMethodName());
-                    methodRetryCount++;
-
-                    if (methodRetryCount >= maxMethodRetries) {
-                        currentMethodStats.complete("FAILED", finalCoverage);
-                        methodCompleted = true;
-                    }
-                } else {
+                if (verifyResult.isCoverageThresholdMet()) {
                     log.info("✅ Method {} completed with coverage: {}%",
-                            methodInfo.getMethodName(), String.format("%.1f", finalCoverage));
-                    currentMethodStats.complete("SUCCESS", finalCoverage);
+                            methodInfo.getMethodName(), String.format("%.1f", currentCoverage));
+                    currentMethodStats.complete("SUCCESS", currentCoverage);
                     methodCompleted = true;
+                } else {
+                    log.info("⚠️ Coverage {:.1f}% below threshold {}%, generating more tests",
+                            currentCoverage, coverageThreshold);
+                    coverageRetryCount++;
                 }
+            }
+
+            if (!methodCompleted) {
+                log.warn("⚠️ Method {} completed with coverage below threshold: {}%",
+                        methodInfo.getMethodName(), String.format("%.1f", currentCoverage));
+                currentMethodStats.complete("PARTIAL", currentCoverage);
             }
         }
 
@@ -391,17 +375,58 @@ public class SimpleAgentOrchestrator {
         log.info("📊 Processed: {}, Skipped: {}, Total: {}",
                 processedCount, skippedCount, methodsToProcess.size());
 
-        AgentExecutor summaryExecutor = createExecutor(systemPrompt, 5);
-        AgentResult summaryResult = summaryExecutor.run(
-                "Call getIterationProgress() to show the final summary of all tested methods.");
-
-        if (summaryResult.success()) {
-            log.info("Iterative test generation completed");
-        }
-
-        // ===== 生成报告 =====
+        // 生成报告
         String agentDir = getAgentRunDirectory();
         generateReport(agentDir);
+    }
+
+    /**
+     * 运行 LLM 并等待完成
+     */
+    private boolean runLlmAndWait(String systemPrompt, String userPrompt, 
+            IterationStats.MethodStats methodStats) {
+        AgentExecutor executor = createExecutor(systemPrompt, 10);
+        
+        if (methodStats != null) {
+            executor.setTokenStatsCallback((prompt, response) -> {
+                methodStats.addPromptTokens(prompt);
+                methodStats.addResponseTokens(response);
+            });
+        }
+
+        ConsoleStreamingHandler handler = new ConsoleStreamingHandler();
+        executor.runStream(userPrompt, handler);
+
+        try {
+            handler.await(5, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+
+        if (handler.getError() != null) {
+            log.error("LLM call failed: {}", handler.getError().getMessage());
+            return false;
+        }
+
+        String content = handler.getContent();
+        return content != null && !content.trim().isEmpty();
+    }
+
+    /**
+     * 根据验证失败的步骤构建修复提示词
+     */
+    private String buildFixPromptForStep(VerificationResult result, String testFilePath, String testClassName) {
+        VerificationStep failedStep = result.getFailedStep();
+        String errorDetails = result.getErrorDetails() != null ? result.getErrorDetails() : result.getErrorMessage();
+        
+        return switch (failedStep) {
+            case SYNTAX_CHECK -> FixPromptBuilder.buildSyntaxFixPrompt(testFilePath, errorDetails);
+            case LSP_CHECK -> FixPromptBuilder.buildLspFixPrompt(testFilePath, errorDetails);
+            case COMPILE -> FixPromptBuilder.buildCompileFixPrompt(testFilePath, errorDetails);
+            case TEST -> FixPromptBuilder.buildTestFixPrompt(testFilePath, testClassName, errorDetails);
+            case COVERAGE -> ""; // 覆盖率不足在外层处理
+        };
     }
 
     /**
@@ -463,22 +488,40 @@ public class SimpleAgentOrchestrator {
         }
 
         prompt.append(String.format("""
-                **Your Task:**
-                1. Read the current test file (readFile)
-                2. Analyze the source code for method `%s`
-                3. Generate tests to improve coverage for THIS METHOD ONLY
-                4. Append tests using writeFileFromLine (do NOT overwrite existing tests)
-                5. checkSyntax → compileProject → executeTest
-                6. getSingleMethodCoverage to verify improvement
-                7. completeCurrentMethod with status and final coverage
+                **Your Task (STRICT ORDER - DO NOT SKIP STEPS):**
 
-                Focus on:
-                - Uncovered branches and edge cases
-                - Boundary conditions
-                - Error handling paths
+                📝 **Step 1: Read & Analyze**
+                1.1 readFile(testFilePath) - Read the current test file
+                1.2 Analyze method `%s` to identify uncovered paths
 
-                After completing, STOP.
-                """, methodInfo.getMethodName()));
+                📝 **Step 2: Generate & Write Tests**
+                2.1 Generate tests for THIS METHOD ONLY (not other methods!)
+                2.2 writeFileFromLine to APPEND tests (do NOT overwrite existing tests)
+
+                ⚠️ **Step 3: Syntax Check (MANDATORY)**
+                3.1 checkSyntax(testFilePath) or checkSyntaxWithLsp(testFilePath)
+                3.2 IF LSP_ERRORS → FIX errors → checkSyntax again
+                3.3 ONLY proceed when LSP_OK
+
+                🔨 **Step 4: Compile & Test (AFTER syntax check passes!)**
+                4.1 compileProject() ← MUST call after checkSyntax returns LSP_OK
+                4.2 executeTest(testClassName) ← Run tests
+                4.3 IF test fails → FIX → checkSyntax → compileProject → executeTest
+
+                📊 **Step 5: Verify Coverage**
+                5.1 getSingleMethodCoverage(modulePath, className, "%s")
+
+                ✅ **Step 6: Complete**
+                6.1 completeCurrentMethod(status, coverage, notes)
+
+                ❌ **DO NOT:**
+                - Skip compileProject after checkSyntax passes
+                - Call getPriorityMethods or initMethodIteration (already initialized!)
+                - Generate tests for OTHER methods
+                - Re-read the source file unnecessarily
+
+                After Step 6, STOP and wait for next method.
+                """, methodInfo.getMethodName(), methodInfo.getMethodName()));
 
         return prompt.toString();
     }
@@ -822,7 +865,8 @@ public class SimpleAgentOrchestrator {
         // 添加明确的测试文件路径指导
         String testFilePath = calculateTestFilePath(targetFile);
         message.append("\nTest file path: ").append(testFilePath);
-        message.append("\n\n⚠️ CRITICAL: You MUST write the test file to the exact path above (").append(testFilePath).append(").");
+        message.append("\n\n⚠️ CRITICAL: You MUST write the test file to the exact path above (").append(testFilePath)
+                .append(").");
 
         // 添加预检查结果信息
         if (currentPreCheck != null) {
@@ -928,18 +972,33 @@ public class SimpleAgentOrchestrator {
 
                 ⚠️ THIS IS A FRESH CONTEXT - Previous conversation is cleared.
 
-                Steps:
-                1. Call getNextMethod() to get the current method
-                2. If "ITERATION_COMPLETE", call getIterationProgress() and STOP
-                3. Otherwise:
-                   a. Read current test file (readFile)
-                   b. Generate tests for this method only
-                   c. Append using writeFileFromLine
-                   d. checkSyntax → compileProject → executeTest
-                   e. getSingleMethodCoverage
-                   f. completeCurrentMethod with status
+                **Steps (STRICT ORDER - DO NOT SKIP):**
 
-                After completing, STOP.
+                1️⃣ getNextMethod() → Get current method info
+                   - If "ITERATION_COMPLETE" → getIterationProgress() → STOP
+
+                2️⃣ readFile(testFilePath) → Read current test file
+
+                3️⃣ Generate & write tests for THIS METHOD ONLY
+                   - Use writeFileFromLine to APPEND (not overwrite)
+
+                4️⃣ **SYNTAX CHECK (MANDATORY)**
+                   - checkSyntax(testFilePath)
+                   - IF LSP_ERRORS → fix → checkSyntax again
+                   - ONLY proceed when LSP_OK
+
+                5️⃣ **COMPILE & TEST (AFTER syntax check passes!)**
+                   - compileProject() ← MUST call!
+                   - executeTest(testClassName)
+
+                6️⃣ getSingleMethodCoverage(modulePath, className, methodName)
+
+                7️⃣ completeCurrentMethod(status, coverage, notes)
+
+                ❌ DO NOT skip compileProject after checkSyntax passes!
+                ❌ DO NOT call getPriorityMethods or initMethodIteration again!
+
+                After Step 7, STOP.
                 """, iteration, targetFile);
     }
 
@@ -1035,7 +1094,6 @@ public class SimpleAgentOrchestrator {
     private PreCheckResult performPreCheck(String projectRoot, String targetFile) {
         return preCheckExecutor.execute(projectRoot, targetFile);
     }
-
 
     /**
      * 提取全限定类名

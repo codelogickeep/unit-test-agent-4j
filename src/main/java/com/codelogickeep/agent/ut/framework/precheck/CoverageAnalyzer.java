@@ -16,7 +16,10 @@ import java.util.regex.Pattern;
  */
 public class CoverageAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(CoverageAnalyzer.class);
-    private static final Pattern COVERAGE_PATTERN = Pattern.compile("([✓✗])\\s+(.+?)\\s+Line:\\s+(\\d+\\.\\d+)%\\s+Branch:\\s+(\\d+\\.\\d+)%");
+    // 匹配格式: ✓/◐/✗ methodName(params) Line: XX.X% Branch: XX.X%
+    // 支持三种状态符号：✓ (已覆盖), ◐ (部分覆盖), ✗ (未覆盖)
+    // 捕获组2包含方法名和括号，如 "method1()" 或 "method1(int, String)"
+    private static final Pattern COVERAGE_PATTERN = Pattern.compile("([✓◐✗])\\s+(\\w+\\([^)]*\\))\\s+Line:\\s*([\\d.]+)%\\s+Branch:\\s*([\\d.]+)%");
 
     private final ToolRegistry toolRegistry;
     private final AppConfig config;
@@ -88,12 +91,29 @@ public class CoverageAnalyzer {
 
         Matcher matcher = COVERAGE_PATTERN.matcher(coverageInfo);
         while (matcher.find()) {
-            String methodName = matcher.group(2).trim();
+            String methodName = matcher.group(2).trim();  // 包含括号，如 "method1()" 或 "method1(int, String)"
             double lineCoverage = Double.parseDouble(matcher.group(3));
             double branchCoverage = Double.parseDouble(matcher.group(4));
 
+            // 跳过构造方法（方法名可能包含括号）
+            String simpleName = methodName.contains("(") ? methodName.substring(0, methodName.indexOf("(")) : methodName;
+            if ("constructor".equals(simpleName) || "<init>".equals(simpleName)) {
+                continue;
+            }
+
             String priority = determinePriority(lineCoverage, branchCoverage, threshold);
-            methods.add(new MethodCoverageInfo(methodName, priority, lineCoverage, branchCoverage));
+            MethodCoverageInfo info = new MethodCoverageInfo(methodName, priority, lineCoverage, branchCoverage);
+            // 设置 needsTest 标志：覆盖率低于阈值的方法需要生成测试
+            info.setNeedsTest(lineCoverage < threshold);
+            methods.add(info);
+        }
+
+        // 注意：排序在 PreCheckResult.getMethodsSortedByCoverage() 中进行
+        // 这里保持原始顺序返回
+
+        log.info("Parsed {} methods from coverage info", methods.size());
+        for (MethodCoverageInfo m : methods) {
+            log.debug("  - {}", m);
         }
 
         return methods;
@@ -114,6 +134,7 @@ public class CoverageAnalyzer {
             System.out.println("ℹ️ Attempting static analysis to discover methods...");
             Map<String, Object> analyzeArgs = new HashMap<>();
             analyzeArgs.put("path", targetFile);
+            // 使用 CodeAnalyzerTool.analyzeClass 方法获取类结构信息
             String analysisResult = toolRegistry.invoke("analyzeClass", analyzeArgs);
 
             if (analysisResult != null && !analysisResult.startsWith("ERROR")) {
@@ -136,11 +157,45 @@ public class CoverageAnalyzer {
 
     private List<String> extractMethodNamesFromAnalysis(String analysisResult) {
         List<String> methodNames = new ArrayList<>();
-        Pattern methodPattern = Pattern.compile("Method:\\s+(.+?)\\s*\\(");
+        
+        // 匹配格式 "Method: methodName (...)" 或 "Method: methodName(...)"
+        // 例如: "Method: testMethod1 ()" 或 "Method: testMethod1()"
+        Pattern methodPattern = Pattern.compile("Method:\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
         Matcher matcher = methodPattern.matcher(analysisResult);
         while (matcher.find()) {
-            methodNames.add(matcher.group(1).trim());
+            String name = matcher.group(1);
+            if (!methodNames.contains(name) && !name.equals("main") && !name.equals("toString")
+                    && !name.equals("hashCode") && !name.equals("equals")) {
+                methodNames.add(name);
+            }
         }
+        
+        // 回退：匹配 CodeAnalyzerTool.analyzeClass 输出格式: "- Signature: methodName(params)"
+        if (methodNames.isEmpty()) {
+            Pattern signaturePattern = Pattern.compile("-\\s+Signature:\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\(");
+            Matcher sigMatcher = signaturePattern.matcher(analysisResult);
+            while (sigMatcher.find()) {
+                String name = sigMatcher.group(1);
+                if (!methodNames.contains(name) && !name.equals("main") && !name.equals("toString")
+                        && !name.equals("hashCode") && !name.equals("equals")) {
+                    methodNames.add(name);
+                }
+            }
+        }
+        
+        // 最后回退：匹配 "- methodName" 格式
+        if (methodNames.isEmpty()) {
+            Pattern simplePattern = Pattern.compile("\\s*-\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\\(|\\s|$)");
+            Matcher simpleMatcher = simplePattern.matcher(analysisResult);
+            while (simpleMatcher.find()) {
+                String name = simpleMatcher.group(1);
+                if (!methodNames.contains(name) && !name.equals("main") && !name.equals("toString")
+                        && !name.equals("hashCode") && !name.equals("equals") && !name.equals("Signature")) {
+                    methodNames.add(name);
+                }
+            }
+        }
+        
         return methodNames;
     }
 
