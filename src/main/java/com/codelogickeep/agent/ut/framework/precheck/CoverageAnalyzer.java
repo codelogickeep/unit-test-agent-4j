@@ -53,12 +53,16 @@ public class CoverageAnalyzer {
             uncoveredArgs.put("threshold", threshold);
             String uncoveredMethods = toolRegistry.invoke("getUncoveredMethods", uncoveredArgs);
 
-            if (coverageInfo != null && !coverageInfo.startsWith("ERROR")) {
+            // 检查是否有错误（兼容 "Error:" 和 "ERROR:"）
+            boolean hasError = coverageInfo == null || 
+                    coverageInfo.toLowerCase().startsWith("error");
+            
+            if (!hasError) {
                 System.out.println("✅ Coverage analysis complete:");
                 printCoverageSummary(coverageInfo);
                 methodCoverages = parseMethodCoverage(coverageInfo, threshold);
 
-                if (uncoveredMethods != null && !uncoveredMethods.startsWith("ERROR")) {
+                if (uncoveredMethods != null && !uncoveredMethods.toLowerCase().startsWith("error")) {
                     coverageInfo = coverageInfo + "\n\n" + uncoveredMethods;
                 }
             } else {
@@ -137,7 +141,7 @@ public class CoverageAnalyzer {
             // 使用 CodeAnalyzerTool.analyzeClass 方法获取类结构信息
             String analysisResult = toolRegistry.invoke("analyzeClass", analyzeArgs);
 
-            if (analysisResult != null && !analysisResult.startsWith("ERROR")) {
+            if (analysisResult != null && !analysisResult.toLowerCase().startsWith("error")) {
                 List<String> methodNames = extractMethodNamesFromAnalysis(analysisResult);
                 if (!methodNames.isEmpty()) {
                     System.out.println("✅ Discovered " + methodNames.size() + " methods via static analysis");

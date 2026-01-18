@@ -833,7 +833,7 @@ public class SimpleAgentOrchestrator {
             args.put("methodName", methodName);
 
             String result = toolRegistry.invoke("getSingleMethodCoverage", args);
-            if (result != null && !result.startsWith("ERROR")) {
+            if (result != null && !result.toLowerCase().startsWith("error")) {
                 // 解析结果格式: "methodName line=XX.X%"
                 Pattern pattern = Pattern.compile("line[=:]\\s*([0-9]+\\.?[0-9]*)%");
                 Matcher matcher = pattern.matcher(result);

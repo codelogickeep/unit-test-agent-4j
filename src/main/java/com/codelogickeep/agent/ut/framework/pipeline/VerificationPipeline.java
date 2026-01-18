@@ -284,7 +284,7 @@ public class VerificationPipeline {
             String result = toolRegistry.invoke("getSingleMethodCoverage", args);
             log.debug("getSingleMethodCoverage result: {}", result);
             
-            if (result == null || result.startsWith("ERROR")) {
+            if (result == null || result.toLowerCase().startsWith("error")) {
                 log.warn("Failed to get coverage: {}", result);
                 return 0;
             }
