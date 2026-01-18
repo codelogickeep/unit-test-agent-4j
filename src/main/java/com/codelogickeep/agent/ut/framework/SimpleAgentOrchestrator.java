@@ -269,8 +269,11 @@ public class SimpleAgentOrchestrator {
         // ===== Phase 2: 逐方法迭代（使用自动验证管道）=====
         int processedCount = 0;
         int skippedCount = 0;
-        final int maxMethodRetries = 3;
-        final int maxVerificationRetries = 3;
+        // 从配置读取重试次数，默认为 3
+        final int configuredMaxRetries = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() : 3;
+        final int maxMethodRetries = configuredMaxRetries > 0 ? configuredMaxRetries : 3;
+        final int maxVerificationRetries = maxMethodRetries;
+        log.info("📊 Max retries configured: {} (method), {} (verification)", maxMethodRetries, maxVerificationRetries);
 
         for (int i = 0; i < methodsToProcess.size(); i++) {
             MethodCoverageInfo methodInfo = methodsToProcess.get(i);
@@ -359,12 +362,12 @@ public class SimpleAgentOrchestrator {
                     }
 
                     verificationRetryCount++;
-                    
+
                     // 检查是否还有重试机会，如果有则切回验证阶段
                     if (verificationRetryCount < maxVerificationRetries) {
                         log.info("🔄 Retrying verification (attempt {}/{})",
                                 verificationRetryCount + 1, maxVerificationRetries);
-                        
+
                         // 切回验证阶段工具集（从 REPAIR 切回）
                         if (phaseManager.isIterativeMode()) {
                             phaseManager.switchToPhase(WorkflowPhase.VERIFICATION, toolRegistry);
@@ -569,7 +572,9 @@ public class SimpleAgentOrchestrator {
 
         int maxMethodIterations = 20;
         int methodRetryCount = 0;
-        final int maxMethodRetries = 3;
+        // 从配置读取重试次数，默认为 3
+        final int configuredMaxRetries = config.getWorkflow() != null ? config.getWorkflow().getMaxRetries() : 3;
+        final int maxMethodRetries = configuredMaxRetries > 0 ? configuredMaxRetries : 3;
 
         for (int i = 1; i <= maxMethodIterations; i++) {
             log.info(">>> Phase 2: Method Iteration #{}", i);
