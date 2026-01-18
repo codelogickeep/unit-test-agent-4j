@@ -171,6 +171,7 @@ workflow:
   skip-low-priority: false                # Skip getters/setters
   max-stale-iterations: 3                 # Stop after N iterations without progress
   min-coverage-gain: 1                    # Min coverage gain (%) per iteration
+  enable-phase-switching: false           # Dynamic phase switching (40-60% token savings)
 
 # =============================================================================
 # Batch Mode Settings
@@ -226,6 +227,7 @@ dependencies:
 | `skip-low-priority` | bool | `false` | Skip getters/setters |
 | `max-stale-iterations` | int | `3` | Stop after N no-progress iterations |
 | `min-coverage-gain` | int | `1` | Min coverage gain % per iteration |
+| `enable-phase-switching` | bool | `false` | Enable dynamic phase switching (saves 40-60% tokens) |
 
 ### Batch Settings (`batch`)
 

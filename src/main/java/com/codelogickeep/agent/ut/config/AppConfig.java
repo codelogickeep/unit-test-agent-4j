@@ -12,11 +12,9 @@ public class AppConfig {
     private LlmConfig llm;
     private WorkflowConfig workflow;
     private Map<String, String> prompts; // Key: prompt name (e.g. "system"), Value: file path
-    private McpConfig mcp;
-    private List<SkillConfig> skills;
-    private Map<String, String> dependencies; // New: key is artifactId, value is min version
-    private BatchConfig batch; // New: batch mode settings
-    private IncrementalConfig incremental; // New: incremental mode settings
+    private Map<String, String> dependencies; // key is artifactId, value is min version
+    private BatchConfig batch; // batch mode settings
+    private IncrementalConfig incremental; // incremental mode settings
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -109,19 +107,4 @@ public class AppConfig {
         private boolean enablePhaseSwitching = false; // 是否启用动态阶段切换（默认关闭，保持向后兼容）
     }
 
-    @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class McpConfig {
-        private List<Map<String, Object>> servers;
-    }
-
-    @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class SkillConfig {
-        private String name;
-        private String description;
-        private String type;
-        private Map<String, Object> params;
-        private List<String> tools; // 工具类名列表，空或 null 表示使用全部工具
-    }
 }

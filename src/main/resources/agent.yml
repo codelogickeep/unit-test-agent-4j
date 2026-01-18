@@ -52,28 +52,3 @@ dependencies:
 # Prompts Configuration
 prompts:
   system: "prompts/system-prompt.st"      # System prompt template path
-
-# =============================================================================
-# Phase Switching (Dynamic Tool Loading)
-# =============================================================================
-# 阶段切换功能已重构，工具集定义移至代码中：
-#   - 位置: src/main/java/.../framework/phase/WorkflowPhase.java
-#   - 启用: workflow.enable-phase-switching=true
-#
-# 各阶段工具集（代码中定义）：
-#   ANALYSIS:     CodeAnalyzerTool, FileSystemTool, DirectoryTool, MethodIteratorTool,
-#                 BoundaryAnalyzerTool, TestDiscoveryTool, ProjectScannerTool (7)
-#   GENERATION:   FileSystemTool, CodeAnalyzerTool, KnowledgeBaseTool, BoundaryAnalyzerTool (4)
-#   VERIFICATION: SyntaxCheckerTool, LspSyntaxCheckerTool, MavenExecutorTool, 
-#                 CoverageTool, TestReportTool, FileSystemTool (6)
-#   REPAIR:       FileSystemTool, CodeAnalyzerTool, TestReportTool (3)
-#
-# 注意: 下面的 skills 和 mcp 配置已废弃，保留仅供参考
-# =============================================================================
-
-# [DEPRECATED] MCP Configuration - 未实现，保留供未来扩展
-# mcp:
-#   servers: []
-
-# [DEPRECATED] Skills Configuration - 已迁移至 WorkflowPhase.java
-# 如需修改阶段工具集，请编辑 WorkflowPhase 枚举

@@ -91,10 +91,6 @@ public class App implements Callable<Integer> {
             "--threshold" }, description = "Coverage threshold (0-100). Methods below this threshold will be targeted. Default: 80.")
     private Integer coverageThreshold;
 
-    // Skill 参数已移除：完整的单测生成流程需要所有阶段的工具
-    // 分析(analysis) → 生成(generation) → 验证(verification) → 修复(repair)
-    // Skills 配置现在仅作为内部文档参考，不再支持命令行指定
-
     public static void main(String[] args) {
         if (args.length == 0) {
             System.out.println("Unit Test Agent: An AI assistant for automatically generating JUnit 5 unit tests.");
